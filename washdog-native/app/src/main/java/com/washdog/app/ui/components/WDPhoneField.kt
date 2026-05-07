@@ -40,13 +40,14 @@ fun WDPhoneField(
         label                = { Text("Teléfono") },
         placeholder          = { Text("10 dígitos") },
         visualTransformation = PhoneMaskTransformation,
-        keyboardOptions      = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions      = KeyboardOptions(keyboardType = KeyboardType.Phone),
         singleLine           = true,
         modifier             = modifier
     )
 }
 
-fun digitsToPhone(digits: String): String = "+52$digits"
+fun digitsToPhone(digits: String): String =
+    if (digits.isEmpty()) "" else "+52$digits"
 
 fun phoneToDigits(phone: String): String =
-    phone.removePrefix("+52").removePrefix(" ").filter { it.isDigit() }
+    phone.filter { it.isDigit() }.removePrefix("52").take(10)
