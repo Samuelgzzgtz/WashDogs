@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="wd_bg">#FFFAF6F0</color>
+    <color name="wd_primary">#FF2D4A3E</color>
+    <color name="wd_ink">#FF1F2A24</color>
+    <color name="ic_launcher_background">#FFFFFFFF</color>
+</resources>

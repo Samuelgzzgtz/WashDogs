@@ -1,0 +1,14 @@
+# Android
+washdog-native/.gradle/
+washdog-native/local.properties
+washdog-native/app/build/
+washdog-native/build/
+washdog-native/.idea/
+washdog-native/*.iml
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/
