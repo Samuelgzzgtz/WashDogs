@@ -79,7 +79,9 @@ fun ClientsScreen(vm: AppViewModel, onNavigateSettings: () -> Unit, onAddClient:
     var query       by remember { mutableStateOf("") }
 
     val filtered   = vm.clients.filter {
-        it.ownerName.fuzzyContains(query) || it.petName.fuzzyContains(query)
+        it.ownerName.fuzzyContains(query) ||
+        it.petName.fuzzyContains(query)   ||
+        it.breed.fuzzyContains(query)
     }
     val reschedule = filtered.filter { it.needsReschedule }
     val rest       = filtered.filter { !it.needsReschedule }
