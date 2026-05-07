@@ -2,6 +2,7 @@ package com.washdog.app
 
 import com.washdog.app.util.fuzzyContains
 import com.washdog.app.util.normalized
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,10 +10,10 @@ import org.junit.Test
 class StringUtilsTest {
 
     @Test fun `normalized removes accents and lowercases`() {
-        assert("jose".normalized() == "jose")
-        assert("José".normalized() == "jose")
-        assert("ÁNGEL".normalized() == "angel")
-        assert("Año".normalized() == "ano")
+        assertEquals("jose",  "jose".normalized())
+        assertEquals("jose",  "José".normalized())
+        assertEquals("angel", "ÁNGEL".normalized())
+        assertEquals("ano",   "Año".normalized())
     }
 
     @Test fun `fuzzyContains finds with accents`() {
