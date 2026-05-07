@@ -8,7 +8,7 @@ data class Appointment(
     val petName: String,
     val service: String,
     val time: String,
-    val endTime: String = "",
     val date: String,
-    val status: ApptStatus
+    val status: ApptStatus,
+    val endTime: String = ""
 )
