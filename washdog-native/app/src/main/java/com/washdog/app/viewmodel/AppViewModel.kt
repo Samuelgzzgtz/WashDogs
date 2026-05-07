@@ -122,7 +122,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun checkOverlap(candidate: Appointment) {
         overlapConflict = if (candidate.time.isBlank()) null
-                          else OverlapChecker.findConflict(candidate, appointments.toList())
+                          else OverlapChecker.findConflict(candidate, appointments)
     }
 
     // ── Computed ─────────────────────────────────────────────────────────────

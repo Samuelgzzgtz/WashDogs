@@ -94,18 +94,20 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
         val client = selectedClient ?: vm.clients.firstOrNull {
             "${it.petName} · ${it.ownerName}" == clientQuery
         }
-        val candidate = com.washdog.app.data.models.Appointment(
+        val candidate = Appointment(
             id         = "",
             clientName = client?.ownerName ?: "",
             petName    = client?.petName ?: "",
             service    = service,
             time       = time,
             date       = date,
-            status     = com.washdog.app.data.models.ApptStatus.SCHEDULED,
+            status     = ApptStatus.SCHEDULED,
             endTime    = if (endTimeEnabled) endTime else ""
         )
         vm.checkOverlap(candidate)
     }
+
+    val conflict = vm.overlapConflict
 
     Box(Modifier.fillMaxSize().background(WDBg)) {
         LazyColumn(
@@ -255,7 +257,6 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                 }
             }
 
-            val conflict = vm.overlapConflict
             if (conflict != null) {
                 item(key = "overlap_error") {
                     androidx.compose.material3.Card(
@@ -280,7 +281,6 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                 val dateValid = remember(date) {
                     try { java.time.LocalDate.parse(date); true } catch (e: Exception) { false }
                 }
-                val conflict = vm.overlapConflict
                 Button(
                     onClick  = {
                         val client = selectedClient ?: vm.clients.firstOrNull {
