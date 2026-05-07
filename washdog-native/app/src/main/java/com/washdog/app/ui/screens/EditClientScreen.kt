@@ -1,0 +1,251 @@
+package com.washdog.app.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.washdog.app.data.models.Client
+import com.washdog.app.data.models.PetType
+import com.washdog.app.ui.components.WDPhoneField
+import com.washdog.app.ui.components.digitsToPhone
+import com.washdog.app.ui.components.phoneToDigits
+import com.washdog.app.ui.theme.WDBg
+import com.washdog.app.ui.theme.WDExpenseDk
+import com.washdog.app.ui.theme.WDInk
+import com.washdog.app.ui.theme.WDInkMute
+import com.washdog.app.ui.theme.WDPrimary
+import com.washdog.app.viewmodel.AppViewModel
+
+@Composable
+fun EditClientScreen(vm: AppViewModel, clientId: String, onBack: () -> Unit) {
+    val client = vm.clients.firstOrNull { it.id == clientId } ?: return
+
+    val config   = LocalConfiguration.current
+    val isTablet = config.screenWidthDp >= 600
+    val ph       = if (isTablet) 24.dp else 16.dp
+    val maxW     = if (isTablet) 600.dp else Dp.Unspecified
+
+    var ownerName by remember { mutableStateOf(client.ownerName) }
+    var petName   by remember { mutableStateOf(client.petName) }
+    var breed     by remember { mutableStateOf(client.breed) }
+    var phoneDigits by remember { mutableStateOf(phoneToDigits(client.phone)) }
+    var petType          by remember { mutableStateOf(client.petType) }
+    var needsReschedule  by remember { mutableStateOf(client.needsReschedule) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Eliminar cliente") },
+            text  = { Text("¿Eliminar a ${client.ownerName}? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteClient(clientId)
+                    onBack()
+                }) {
+                    Text("Eliminar", color = WDExpenseDk)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(WDBg)
+    ) {
+        LazyColumn(
+            modifier            = Modifier
+                .widthIn(max = maxW)
+                .align(Alignment.TopCenter),
+            contentPadding      = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = ph,
+                vertical   = 16.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item(key = "header") {
+                Row(
+                    modifier          = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.Filled.ArrowBack,
+                            contentDescription = null,
+                            tint               = WDInkMute
+                        )
+                    }
+                    Text(
+                        text       = "Editar cliente",
+                        fontSize   = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = WDInk
+                    )
+                }
+            }
+            item(key = "ownerName") {
+                OutlinedTextField(
+                    value         = ownerName,
+                    onValueChange = { ownerName = it },
+                    label         = { Text("Nombre del dueño") },
+                    modifier      = Modifier.fillMaxWidth(),
+                    singleLine    = true
+                )
+            }
+            item(key = "petName") {
+                OutlinedTextField(
+                    value         = petName,
+                    onValueChange = { petName = it },
+                    label         = { Text("Nombre de la mascota") },
+                    modifier      = Modifier.fillMaxWidth(),
+                    singleLine    = true
+                )
+            }
+            item(key = "breed") {
+                OutlinedTextField(
+                    value         = breed,
+                    onValueChange = { breed = it },
+                    label         = { Text("Raza") },
+                    modifier      = Modifier.fillMaxWidth(),
+                    singleLine    = true
+                )
+            }
+            item(key = "phone") {
+                WDPhoneField(
+                    digits         = phoneDigits,
+                    onDigitsChange = { phoneDigits = it },
+                    modifier       = Modifier.fillMaxWidth()
+                )
+            }
+            item(key = "petType") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text     = "Tipo de mascota",
+                        fontSize = 13.sp,
+                        color    = WDInkMute
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val dogSelected = petType == PetType.DOG
+                        OutlinedButton(
+                            onClick  = { petType = PetType.DOG },
+                            modifier = Modifier.weight(1f),
+                            border   = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (dogSelected) WDPrimary else WDInkMute
+                            ),
+                            colors   = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (dogSelected) WDPrimary else WDInkMute
+                            )
+                        ) {
+                            Text("Perro 🐶")
+                        }
+                        val catSelected = petType == PetType.CAT
+                        OutlinedButton(
+                            onClick  = { petType = PetType.CAT },
+                            modifier = Modifier.weight(1f),
+                            border   = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (catSelected) WDPrimary else WDInkMute
+                            ),
+                            colors   = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (catSelected) WDPrimary else WDInkMute
+                            )
+                        ) {
+                            Text("Gato 🐱")
+                        }
+                    }
+                }
+            }
+            item(key = "reschedule") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Estado", fontSize = 13.sp, color = WDInkMute)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick  = { needsReschedule = false },
+                            modifier = Modifier.weight(1f),
+                            border   = androidx.compose.foundation.BorderStroke(1.dp, if (!needsReschedule) WDPrimary else WDInkMute),
+                            colors   = ButtonDefaults.outlinedButtonColors(contentColor = if (!needsReschedule) WDPrimary else WDInkMute)
+                        ) { Text("Normal") }
+                        OutlinedButton(
+                            onClick  = { needsReschedule = true },
+                            modifier = Modifier.weight(1f),
+                            border   = androidx.compose.foundation.BorderStroke(1.dp, if (needsReschedule) WDExpenseDk else WDInkMute),
+                            colors   = ButtonDefaults.outlinedButtonColors(contentColor = if (needsReschedule) WDExpenseDk else WDInkMute)
+                        ) { Text("Reagendar") }
+                    }
+                }
+            }
+            item(key = "save") {
+                Spacer(Modifier.height(4.dp))
+                Button(
+                    onClick  = {
+                        if (ownerName.isBlank() || petName.isBlank()) return@Button
+                        val updatedClient = Client(
+                            id              = clientId,
+                            ownerName       = ownerName.trim(),
+                            petName         = petName.trim(),
+                            breed           = breed.trim(),
+                            lastVisit       = client.lastVisit,
+                            needsReschedule = needsReschedule,
+                            petType         = petType,
+                            phone           = digitsToPhone(phoneDigits)
+                        )
+                        vm.updateClient(updatedClient)
+                        onBack()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors   = ButtonDefaults.buttonColors(containerColor = WDPrimary)
+                ) {
+                    Text("Guardar cambios", color = Color.White)
+                }
+            }
+            item(key = "delete") {
+                OutlinedButton(
+                    onClick  = { showDeleteDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    border   = androidx.compose.foundation.BorderStroke(1.dp, WDExpenseDk),
+                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = WDExpenseDk)
+                ) {
+                    Text("Eliminar cliente")
+                }
+            }
+        }
+    }
+}
