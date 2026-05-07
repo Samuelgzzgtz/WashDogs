@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.washdog.app.data.AppRepository
 import com.washdog.app.data.models.Appointment
+import com.washdog.app.util.OverlapChecker
 import com.washdog.app.data.models.ApptStatus
 import com.washdog.app.data.models.Client
 import com.washdog.app.data.models.PetType
@@ -29,6 +30,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var tplConfirm    by mutableStateOf(AppRepository.DEFAULT_CONFIRM)
         private set
     var tplReschedule by mutableStateOf(AppRepository.DEFAULT_RESCHEDULE)
+        private set
+
+    var overlapConflict by mutableStateOf<Appointment?>(null)
         private set
 
     init { viewModelScope.launch { loadData() } }
@@ -114,6 +118,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         tplConfirm    = confirm
         tplReschedule = reschedule
         repo.saveTemplates(welcome, confirm, reschedule)
+    }
+
+    fun checkOverlap(candidate: Appointment) {
+        overlapConflict = if (candidate.time.isBlank()) null
+                          else OverlapChecker.findConflict(candidate, appointments.toList())
     }
 
     // ── Computed ─────────────────────────────────────────────────────────────

@@ -27,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,6 +88,23 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
             onConfirm   = { endTime = it; showEndPicker = false },
             onDismiss   = { showEndPicker = false }
         )
+    }
+
+    LaunchedEffect(time, date, endTime, endTimeEnabled) {
+        val client = selectedClient ?: vm.clients.firstOrNull {
+            "${it.petName} · ${it.ownerName}" == clientQuery
+        }
+        val candidate = com.washdog.app.data.models.Appointment(
+            id         = "",
+            clientName = client?.ownerName ?: "",
+            petName    = client?.petName ?: "",
+            service    = service,
+            time       = time,
+            date       = date,
+            status     = com.washdog.app.data.models.ApptStatus.SCHEDULED,
+            endTime    = if (endTimeEnabled) endTime else ""
+        )
+        vm.checkOverlap(candidate)
     }
 
     Box(Modifier.fillMaxSize().background(WDBg)) {
@@ -237,17 +255,38 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                 }
             }
 
+            val conflict = vm.overlapConflict
+            if (conflict != null) {
+                item(key = "overlap_error") {
+                    androidx.compose.material3.Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                        colors   = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = WDExpenseTnt
+                        )
+                    ) {
+                        Text(
+                            text     = "Conflicto: ${conflict.clientName} · ${conflict.petName} ya tiene cita a las ${conflict.time}",
+                            fontSize = 12.sp,
+                            color    = WDExpenseDk,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+            }
+
             item(key = "save_btn") {
                 Spacer(Modifier.height(4.dp))
                 val dateValid = remember(date) {
                     try { java.time.LocalDate.parse(date); true } catch (e: Exception) { false }
                 }
+                val conflict = vm.overlapConflict
                 Button(
                     onClick  = {
                         val client = selectedClient ?: vm.clients.firstOrNull {
                             "${it.petName} · ${it.ownerName}" == clientQuery
                         }
-                        if (client != null && service.isNotBlank() && time.isNotBlank() && dateValid) {
+                        if (client != null && service.isNotBlank() && time.isNotBlank() && dateValid && conflict == null) {
                             vm.addAppointment(
                                 Appointment(
                                     id         = java.util.UUID.randomUUID().toString(),
@@ -255,14 +294,15 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                                     petName    = client.petName,
                                     service    = service,
                                     time       = time,
-                                    endTime    = if (endTimeEnabled) endTime else "",
                                     date       = date,
-                                    status     = ApptStatus.SCHEDULED
+                                    status     = ApptStatus.SCHEDULED,
+                                    endTime    = if (endTimeEnabled) endTime else ""
                                 )
                             )
                             onBack()
                         }
                     },
+                    enabled  = conflict == null,
                     modifier = Modifier.fillMaxWidth(),
                     colors   = ButtonDefaults.buttonColors(containerColor = WDPrimary, contentColor = Color.White)
                 ) {
