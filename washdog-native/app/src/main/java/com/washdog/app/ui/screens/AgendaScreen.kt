@@ -55,6 +55,7 @@ import com.washdog.app.R
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.data.models.ApptStatus
 import com.washdog.app.ui.components.WDMonthCalendar
+import com.washdog.app.ui.components.WDTimeline
 import com.washdog.app.ui.theme.WDBg
 import com.washdog.app.ui.theme.WDCard
 import com.washdog.app.ui.theme.WDIncome
@@ -130,6 +131,22 @@ fun AgendaScreen(vm: AppViewModel, onAddAppointment: (date: String) -> Unit) {
                         today            = today,
                         onDaySelected    = { selectedDay = it.toString() },
                         modifier         = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
+                    )
+                }
+            }
+
+            item(key = "timeline") {
+                Surface(
+                    modifier       = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ph),
+                    shape          = RoundedCornerShape(16.dp),
+                    color          = WDCard,
+                    tonalElevation = 2.dp
+                ) {
+                    WDTimeline(
+                        appointments = filtered,
+                        modifier     = Modifier.padding(8.dp)
                     )
                 }
             }
