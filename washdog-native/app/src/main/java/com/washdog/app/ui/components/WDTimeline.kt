@@ -72,8 +72,7 @@ fun WDTimeline(
             val startMin = toMin(appt.time) ?: return@forEach
             if (startMin < FIRST_H * 60 || startMin >= LAST_H * 60) return@forEach
 
-            val endMin   = toMin(appt.endTime)
-                .takeIf { appt.endTime.isNotEmpty() } ?: (startMin + 60)
+            val endMin   = (toMin(appt.endTime) ?: (startMin + 60)).coerceAtMost(LAST_H * 60)
             val topDp    = SLOT_H * ((startMin - FIRST_H * 60).toFloat() / 60f)
             val heightDp = (SLOT_H * ((endMin - startMin).toFloat() / 60f))
                 .coerceAtLeast(44.dp)
