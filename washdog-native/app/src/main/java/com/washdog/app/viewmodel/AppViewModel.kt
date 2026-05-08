@@ -15,6 +15,10 @@ import com.washdog.app.data.models.Client
 import com.washdog.app.data.models.PetType
 import com.washdog.app.data.models.Transaction
 import com.washdog.app.data.models.TxType
+import com.washdog.app.data.models.BusinessHours
+import com.washdog.app.data.models.ServiceZone
+import com.washdog.app.data.models.ZonePrices
+import com.washdog.app.util.ProximityEngine
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -34,6 +38,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     var overlapConflict by mutableStateOf<Appointment?>(null)
         private set
+    var businessHours by mutableStateOf(BusinessHours())
+        private set
+    var zonePrices by mutableStateOf(ZonePrices())
+        private set
 
     init { viewModelScope.launch { loadData() } }
 
@@ -43,15 +51,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val savedCl     = repo.loadClients()
         val savedAppt   = repo.loadAppointments()
         val (w, c, r)   = repo.loadTemplates()
+        val savedBh     = repo.loadBusinessHours()
+        val savedZp     = repo.loadZonePrices()
 
         if (!initialized) {
-            // Primera vez: carga seeds y marca como inicializado
             loadSeedTransactions()
             loadSeedClients()
             loadSeedAppointments()
             repo.markInitialized()
         } else {
-            // Cargas normales — lista vacía es válida (el usuario borró todo)
             transactions.addAll(savedTx)
             clients.addAll(savedCl)
             appointments.addAll(savedAppt)
@@ -60,6 +68,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         tplWelcome    = w
         tplConfirm    = c
         tplReschedule = r
+        businessHours = savedBh
+        zonePrices    = savedZp
     }
 
     // repo.save*() ya no es suspend — lanza en su propio saveScope (no en viewModelScope)
@@ -75,14 +85,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addClient(c: Client) {
-        clients.add(c)
+        val withZone = c.copy(zone = ProximityEngine.detectZone(c.address))
+        clients.add(withZone)
         repo.saveClients(clients.toList())
     }
 
     fun updateClient(updated: Client) {
-        val idx = clients.indexOfFirst { it.id == updated.id }
+        val withZone = updated.copy(zone = ProximityEngine.detectZone(updated.address))
+        val idx = clients.indexOfFirst { it.id == withZone.id }
         if (idx >= 0) {
-            clients[idx] = updated
+            clients[idx] = withZone
             repo.saveClients(clients.toList())
         }
     }
@@ -120,9 +132,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         repo.saveTemplates(welcome, confirm, reschedule)
     }
 
+    fun updateBusinessHours(bh: BusinessHours) {
+        businessHours = bh
+        repo.saveBusinessHours(bh)
+    }
+
+    fun updateZonePrices(zp: ZonePrices) {
+        zonePrices = zp
+        repo.saveZonePrices(zp)
+    }
+
     fun checkOverlap(candidate: Appointment) {
         overlapConflict = if (candidate.time.isBlank()) null
                           else OverlapChecker.findConflict(candidate, appointments)
+    }
+
+    fun isWithinBusinessHours(time: String, date: String): Boolean {
+        return try {
+            val dow = LocalDate.parse(date).dayOfWeek.value % 7   // 0=Dom
+            if (dow in businessHours.closedDays) return false
+            time >= businessHours.openTime && time <= businessHours.closeTime
+        } catch (e: Exception) { true }
     }
 
     // ── Computed ─────────────────────────────────────────────────────────────
