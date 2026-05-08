@@ -10,5 +10,8 @@ data class Appointment(
     val time: String,
     val date: String,
     val status: ApptStatus,
-    val endTime: String = ""
+    val endTime: String = "",
+    val serviceLocation: ServiceLocation = ServiceLocation.HOME,
+    val travelFee: Double = 0.0,
+    val travelBuffer: Int = 0
 )

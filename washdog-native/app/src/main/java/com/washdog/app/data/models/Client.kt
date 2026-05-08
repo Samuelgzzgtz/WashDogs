@@ -10,5 +10,7 @@ data class Client(
     val lastVisit: String,
     val needsReschedule: Boolean,
     val petType: PetType,
-    val phone: String = ""
+    val phone: String = "",
+    val address: String = "",
+    val zone: ServiceZone = ServiceZone.FAR
 )
