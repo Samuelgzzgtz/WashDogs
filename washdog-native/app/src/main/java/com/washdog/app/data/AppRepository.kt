@@ -10,6 +10,8 @@ import com.google.gson.reflect.TypeToken
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.data.models.Client
 import com.washdog.app.data.models.Transaction
+import com.washdog.app.data.models.BusinessHours
+import com.washdog.app.data.models.ZonePrices
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +35,8 @@ class AppRepository(private val context: Context) {
     private val KEY_TPL_CONFIRM    = stringPreferencesKey("tpl_confirm")
     private val KEY_TPL_RESCHEDULE = stringPreferencesKey("tpl_reschedule")
     private val KEY_INITIALIZED    = booleanPreferencesKey("initialized")
+    private val KEY_BUSINESS_HOURS = stringPreferencesKey("business_hours")
+    private val KEY_ZONE_PRICES    = stringPreferencesKey("zone_prices")
 
     companion object {
         const val DEFAULT_WELCOME    = "Hola {{nombre}}, bienvenido/a. Estamos felices de tenerte con nosotros. 😊"
@@ -114,5 +118,31 @@ class AppRepository(private val context: Context) {
                 prefs[KEY_TPL_RESCHEDULE] ?: DEFAULT_RESCHEDULE
             )
         } catch (e: Exception) { Triple(DEFAULT_WELCOME, DEFAULT_CONFIRM, DEFAULT_RESCHEDULE) }
+    }
+
+    fun saveBusinessHours(bh: BusinessHours) {
+        saveScope.launch {
+            context.dataStore.edit { it[KEY_BUSINESS_HOURS] = gson.toJson(bh) }
+        }
+    }
+
+    fun saveZonePrices(zp: ZonePrices) {
+        saveScope.launch {
+            context.dataStore.edit { it[KEY_ZONE_PRICES] = gson.toJson(zp) }
+        }
+    }
+
+    suspend fun loadBusinessHours(): BusinessHours {
+        return try {
+            val json = context.dataStore.data.first()[KEY_BUSINESS_HOURS] ?: return BusinessHours()
+            gson.fromJson(json, BusinessHours::class.java)
+        } catch (e: Exception) { BusinessHours() }
+    }
+
+    suspend fun loadZonePrices(): ZonePrices {
+        return try {
+            val json = context.dataStore.data.first()[KEY_ZONE_PRICES] ?: return ZonePrices()
+            gson.fromJson(json, ZonePrices::class.java)
+        } catch (e: Exception) { ZonePrices() }
     }
 }
