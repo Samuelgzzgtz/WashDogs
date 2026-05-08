@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import com.washdog.app.R
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.data.models.ApptStatus
+import com.washdog.app.data.models.ServiceLocation
 import com.washdog.app.ui.components.WDMonthCalendar
 import com.washdog.app.ui.components.WDTimeline
 import com.washdog.app.ui.theme.WDBg
@@ -298,9 +299,16 @@ private fun AppointmentRow(appt: Appointment, ph: Dp, onDelete: () -> Unit) {
                     color      = WDInk
                 )
                 Text(
-                    text  = "${appt.petName} · ${appt.service}",
+                    text = buildString {
+                        append(appt.petName)
+                        append(" · ")
+                        append(appt.service)
+                        append("  ")
+                        append(if (appt.serviceLocation == ServiceLocation.HOME) "🏠" else "🏪")
+                        if (appt.travelFee > 0) append(" +\$${appt.travelFee.toInt()}")
+                    },
                     fontSize = 12.sp,
-                    color = WDInkMute
+                    color    = WDInkMute
                 )
             }
             IconButton(
