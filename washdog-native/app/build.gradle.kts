@@ -29,6 +29,18 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    testOptions {
+        unitTests.all {
+            it.jvmArgs("-Xmx512m")
+            // Fix: remove PATH entries with embedded quotes (e.g. "Opera GX") that
+            // break the -Djava.library.path JVM argument on Windows.
+            val cleanPath = (System.getenv("PATH") ?: "")
+                .split(";")
+                .filter { p -> !p.contains("\"") }
+                .joinToString(";")
+            it.environment("PATH", cleanPath)
+        }
+    }
     lint {
         disable += setOf(
             "OldTargetApi",
