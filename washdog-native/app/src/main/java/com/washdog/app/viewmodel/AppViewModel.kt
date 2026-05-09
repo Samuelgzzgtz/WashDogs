@@ -5,8 +5,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.washdog.app.data.AppRepository
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.util.OverlapChecker
@@ -20,6 +25,10 @@ import com.washdog.app.data.models.ServiceZone
 import com.washdog.app.data.models.ZonePrices
 import com.washdog.app.util.ProximityEngine
 import java.time.LocalDate
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -45,7 +54,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     init { viewModelScope.launch { loadData() } }
 
+    // Runs once: reads old DataStore data and uploads it to Supabase.
+    // Returns immediately if DataStore is empty or Supabase already has data.
+    private suspend fun migrateFromDataStore() {
+        val oldStore = PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            produceFile = { getApplication<Application>().preferencesDataStoreFile("washdog_prefs") }
+        )
+        val prefs = try { oldStore.data.first() } catch (e: Exception) { return }
+
+        val rawClients = prefs[stringPreferencesKey("clients")]
+        if (rawClients.isNullOrBlank()) return
+
+        if (repo.loadClients().isNotEmpty()) {
+            repo.markInitialized()
+            return
+        }
+
+        val gson = Gson()
+        val oldClients: List<Client>     = try { gson.fromJson(rawClients,
+            object : TypeToken<List<Client>>() {}.type) } catch (e: Exception) { emptyList() }
+        val oldAppts: List<Appointment>  = try { gson.fromJson(
+            prefs[stringPreferencesKey("appointments")] ?: "",
+            object : TypeToken<List<Appointment>>() {}.type) } catch (e: Exception) { emptyList() }
+        val oldTx: List<Transaction>     = try { gson.fromJson(
+            prefs[stringPreferencesKey("transactions")] ?: "",
+            object : TypeToken<List<Transaction>>() {}.type) } catch (e: Exception) { emptyList() }
+
+        if (oldClients.isNotEmpty()) repo.saveClients(oldClients)
+        if (oldAppts.isNotEmpty())   repo.saveAppointments(oldAppts)
+        if (oldTx.isNotEmpty())      repo.saveTransactions(oldTx)
+
+        repo.markInitialized()
+    }
+
     private suspend fun loadData() {
+        if (!repo.isInitialized()) migrateFromDataStore()
         val initialized = repo.isInitialized()
         val savedTx     = repo.loadTransactions()
         val savedCl     = repo.loadClients()
