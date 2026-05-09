@@ -81,6 +81,7 @@ async function bookAppointment(supabase, ctx) {
       last_visit: ctx.date,
     }).select('id').single()
     clientId = created?.id
+    if (!clientId) throw new Error('Failed to create client record')
   } else {
     await supabase.from('clients').update({ last_visit: ctx.date }).eq('id', clientId)
   }
@@ -110,7 +111,8 @@ async function handleMessage(phone, message) {
   const session = await getSession(supabase, phone)
 
   if (session.operator_mode) {
-    // Bot silencioso; reenviar mensaje a Melina
+    // Bot silencioso; reenviar mensaje a Melina.
+    // Operator mode is set/cleared exclusively by operatorRouter — no state mutation here.
     await send(config.operatorPhone, `📨 Cliente ${phone}: "${message}"`)
     return
   }
@@ -245,7 +247,15 @@ async function handleMessage(phone, message) {
   else if (state === 'CONFIRMING') {
     const lower = message.toLowerCase().trim()
     if (['sí', 'si', 's', 'yes', 'ok'].includes(lower)) {
-      await bookAppointment(supabase, { ...ctx, phone })
+      try {
+        await bookAppointment(supabase, { ...ctx, phone })
+      } catch (err) {
+        console.error('[bookAppointment error]', err)
+        response = 'Hubo un error al agendar tu cita. Por favor intenta de nuevo escribiendo "sí".'
+        await saveSession(supabase, phone, 'CONFIRMING', ctx)
+        await send(phone, response)
+        return
+      }
       response = `¡Listo! 🎉 Tu cita está agendada.\nTe esperamos el ${ctx.date} a las ${ctx.time}.\n📍 Privada Granada, Mitras Poniente`
       await send(config.operatorPhone, `✅ Cita agendada: ${ctx.name} · ${ctx.petName} · ${ctx.serviceName} · ${ctx.date} ${ctx.time}`)
       newState = 'DONE'
