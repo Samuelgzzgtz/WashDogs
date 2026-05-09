@@ -82,6 +82,10 @@ async function handle(message) {
         owner_name: name, pet_name: petName, phone: cleanPhone, last_visit: date,
       }).select('id').single()
       clientId = created?.id
+      if (!clientId) {
+        await send(config.operatorPhone, '❌ Error al crear el cliente. Intenta de nuevo.')
+        return
+      }
     }
 
     await supabase.from('appointments').insert({
