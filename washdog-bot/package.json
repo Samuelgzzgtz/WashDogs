@@ -1,0 +1,20 @@
+{
+  "name": "washdog-bot",
+  "version": "1.0.0",
+  "description": "WhatsApp bot reactivo para Washdog Grooming",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "jest --testPathPattern=tests/"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.44.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "twilio": "^5.2.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
