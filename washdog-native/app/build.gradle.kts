@@ -1,6 +1,13 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+}
+
+val localProps = Properties().also { props ->
+    val f = rootProject.file("local.properties")
+    if (f.exists()) props.load(f.inputStream())
 }
 
 android {
@@ -12,8 +19,13 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "SUPABASE_URL",      "\"${localProps.getProperty("supabase.url", "")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProps.getProperty("supabase.anonKey", "")}\"")
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     buildTypes {
         release {
@@ -32,8 +44,6 @@ android {
     testOptions {
         unitTests.all {
             it.jvmArgs("-Xmx512m")
-            // Fix: remove PATH entries with embedded quotes (e.g. "Opera GX") that
-            // break the -Djava.library.path JVM argument on Windows.
             val cleanPath = (System.getenv("PATH") ?: "")
                 .split(";")
                 .filter { p -> !p.contains("\"") }
@@ -43,12 +53,8 @@ android {
     }
     lint {
         disable += setOf(
-            "OldTargetApi",
-            "AndroidGradlePluginVersion",
-            "GradleDependency",
-            "DiscouragedApi",
-            "UnusedResources",
-            "MissingApplicationIcon"
+            "OldTargetApi", "AndroidGradlePluginVersion", "GradleDependency",
+            "DiscouragedApi", "UnusedResources", "MissingApplicationIcon"
         )
         abortOnError = true
     }
@@ -67,6 +73,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
 }
