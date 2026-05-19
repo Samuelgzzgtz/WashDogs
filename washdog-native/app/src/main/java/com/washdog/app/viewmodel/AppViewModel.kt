@@ -13,6 +13,9 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.washdog.app.data.AppRepository
+import com.washdog.app.data.AuthRepository
+import com.washdog.app.data.EncryptedTokenStorage
+import com.washdog.app.BuildConfig
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.util.OverlapChecker
 import com.washdog.app.data.models.ApptStatus
@@ -33,6 +36,18 @@ import kotlinx.coroutines.launch
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = AppRepository(application)
+    private val authRepo = AuthRepository(
+        BuildConfig.SUPABASE_URL,
+        BuildConfig.SUPABASE_ANON_KEY,
+        EncryptedTokenStorage(application)
+    )
+
+    var isAuthenticated by mutableStateOf(false)
+        private set
+    var isAuthLoading by mutableStateOf(false)
+        private set
+    var authError by mutableStateOf<String?>(null)
+        private set
 
     val transactions  = mutableStateListOf<Transaction>()
     val clients       = mutableStateListOf<Client>()
@@ -52,7 +67,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var zonePrices by mutableStateOf(ZonePrices())
         private set
 
-    init { viewModelScope.launch { loadData() } }
+    init {
+        viewModelScope.launch {
+            isAuthenticated = authRepo.refreshIfNeeded()
+            if (isAuthenticated) loadData()
+        }
+    }
 
     // Runs once: reads old DataStore data and uploads it to Supabase.
     // Returns immediately if DataStore is empty or Supabase already has data.
@@ -117,6 +137,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // repo.save*() ya no es suspend — lanza en su propio saveScope (no en viewModelScope)
+
+    fun login(email: String, password: String) {
+        viewModelScope.launch {
+            isAuthLoading = true
+            authError = null
+            authRepo.signIn(email, password)
+                .onSuccess {
+                    isAuthenticated = true
+                    loadData()
+                }
+                .onFailure { authError = it.message }
+            isAuthLoading = false
+        }
+    }
+
+    fun logout() {
+        authRepo.signOut()
+        isAuthenticated = false
+        clients.clear()
+        appointments.clear()
+        transactions.clear()
+        tplWelcome    = AppRepository.DEFAULT_WELCOME
+        tplConfirm    = AppRepository.DEFAULT_CONFIRM
+        tplReschedule = AppRepository.DEFAULT_RESCHEDULE
+    }
 
     fun addTransaction(t: Transaction) {
         transactions.add(0, t)
