@@ -10,6 +10,10 @@ object WhatsAppHelper {
         val uri    = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encode(message)}")
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            setPackage("com.whatsapp.w4b")
+            if (context.packageManager.resolveActivity(this, 0) == null) {
+                setPackage("com.whatsapp")
+            }
         }
         context.startActivity(intent)
     }

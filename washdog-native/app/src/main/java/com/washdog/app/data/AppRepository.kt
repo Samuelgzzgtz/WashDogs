@@ -187,7 +187,8 @@ class AppRepository(private val context: Context) {
                 val service: String?, val time: String?, val date: String?,
                 val status: ApptStatus?, val endTime: String?,
                 val serviceLocation: ServiceLocation?,
-                val travelFee: Double?, val travelBuffer: Int?
+                val travelFee: Double?, val travelBuffer: Int?,
+                val durationMinutes: Int?
             )
             val rows: List<ApptRow> = db.selectAll("appointments",
                 TypeToken.getParameterized(List::class.java, ApptRow::class.java).type)
@@ -205,6 +206,7 @@ class AppRepository(private val context: Context) {
                     serviceLocation = r.serviceLocation ?: ServiceLocation.HOME,
                     travelFee       = r.travelFee       ?: 0.0,
                     travelBuffer    = r.travelBuffer    ?: 0,
+                    durationMinutes = r.durationMinutes ?: 60,
                 )
             }
         } catch (e: Exception) { emptyList() }

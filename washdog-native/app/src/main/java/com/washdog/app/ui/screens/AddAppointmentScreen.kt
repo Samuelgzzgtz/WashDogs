@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -61,7 +62,9 @@ import com.washdog.app.ui.theme.WDInk
 import com.washdog.app.ui.theme.WDInkMute
 import com.washdog.app.ui.theme.WDPrimary
 import com.washdog.app.ui.theme.WDPrimaryTnt
+import com.washdog.app.util.ClosingBarrierValidator
 import com.washdog.app.util.ProximityEngine
+import com.washdog.app.util.ServiceDurationEstimator
 import com.washdog.app.viewmodel.AppViewModel
 
 @Composable
@@ -81,6 +84,11 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
     var showEndPicker   by remember { mutableStateOf(false) }
     var endTimeEnabled  by remember { mutableStateOf(false) }
     var serviceLocation by remember { mutableStateOf(ServiceLocation.HOME) }
+    var durationMinutes by remember { mutableStateOf(60) }
+
+    LaunchedEffect(service) {
+        if (service.isNotBlank()) durationMinutes = ServiceDurationEstimator.suggest(service)
+    }
 
     val clientNames    = vm.clients.map { "${it.petName} · ${it.ownerName}" }
     val serviceNames   = WD_SERVICES.map { it.name }
@@ -219,6 +227,41 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                 )
             }
 
+            // Duración estimada — stepper −15/+15 min
+            item(key = "duration_stepper") {
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Duración estimada", fontSize = 14.sp, color = WDInk)
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick          = { if (durationMinutes > 15) durationMinutes -= 15 },
+                            modifier         = Modifier.size(40.dp),
+                            contentPadding   = PaddingValues(0.dp),
+                            shape            = RoundedCornerShape(8.dp)
+                        ) { Text("−") }
+                        Text(
+                            "$durationMinutes min",
+                            fontSize   = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = WDInk,
+                            modifier   = Modifier.widthIn(min = 64.dp)
+                        )
+                        OutlinedButton(
+                            onClick        = { durationMinutes += 15 },
+                            modifier       = Modifier.size(40.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            shape          = RoundedCornerShape(8.dp)
+                        ) { Text("+") }
+                    }
+                }
+            }
+
             // Fecha
             item(key = "date_field") {
                 OutlinedTextField(
@@ -328,12 +371,31 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                 }
                 val fee    = if (selectedClient != null) ProximityEngine.travelFee(selectedClient!!.zone, serviceLocation, vm.zonePrices) else 0.0
                 val buffer = if (selectedClient != null) ProximityEngine.travelBuffer(selectedClient!!.zone, serviceLocation, vm.zonePrices) else 0
+                val closingExcess = if (time.isNotBlank()) {
+                    ClosingBarrierValidator.minutesExceeded(time, durationMinutes, buffer, vm.businessHours.closeTime)
+                } else 0
+
+                if (closingExcess > 0) {
+                    androidx.compose.material3.Card(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        shape    = RoundedCornerShape(10.dp),
+                        colors   = CardDefaults.cardColors(containerColor = WDExpenseTnt)
+                    ) {
+                        Text(
+                            text     = "La cita excede el cierre por $closingExcess min (hasta ${vm.businessHours.closeTime}). Ajusta la hora o duración.",
+                            fontSize = 12.sp,
+                            color    = WDExpenseDk,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+
                 Button(
                     onClick = {
                         val client = selectedClient ?: vm.clients.firstOrNull {
                             "${it.petName} · ${it.ownerName}" == clientQuery
                         }
-                        if (client != null && service.isNotBlank() && time.isNotBlank() && dateValid && conflict == null) {
+                        if (client != null && service.isNotBlank() && time.isNotBlank() && dateValid && conflict == null && closingExcess == 0) {
                             vm.addAppointment(
                                 Appointment(
                                     id              = java.util.UUID.randomUUID().toString(),
@@ -346,13 +408,14 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                                     endTime         = if (endTimeEnabled) endTime else "",
                                     serviceLocation = serviceLocation,
                                     travelFee       = fee,
-                                    travelBuffer    = buffer
+                                    travelBuffer    = buffer,
+                                    durationMinutes = durationMinutes
                                 )
                             )
                             onBack()
                         }
                     },
-                    enabled  = conflict == null,
+                    enabled  = conflict == null && closingExcess == 0,
                     modifier = Modifier.fillMaxWidth(),
                     colors   = ButtonDefaults.buttonColors(containerColor = WDPrimary, contentColor = Color.White)
                 ) { Text("Guardar cita") }

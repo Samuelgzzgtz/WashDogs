@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -59,7 +60,7 @@ import com.washdog.app.util.WhatsAppHelper
 import com.washdog.app.viewmodel.AppViewModel
 
 @Composable
-fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
+fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onNavigateImport: () -> Unit = {}) {
     val config   = LocalConfiguration.current
     val isTablet = config.screenWidthDp >= 600
     val ph       = if (isTablet) 24.dp else 16.dp
@@ -215,6 +216,14 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             ZonePriceRow("Próxima (CLOSE)", closeFee,  { closeFee  = it }, closeBuffer,  { closeBuffer  = it })
             ZonePriceRow("Media (MEDIUM)",  mediumFee, { mediumFee = it }, mediumBuffer, { mediumBuffer = it })
             ZonePriceRow("Lejos (FAR)",     farFee,    { farFee    = it }, farBuffer,    { farBuffer    = it })
+
+            OutlinedButton(
+                onClick  = onNavigateImport,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape    = RoundedCornerShape(16.dp)
+            ) {
+                Text("Importar desde WhatsApp Business", fontSize = 16.sp)
+            }
 
             Button(
                 onClick  = {

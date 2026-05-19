@@ -13,5 +13,6 @@ data class Appointment(
     val endTime: String = "",
     val serviceLocation: ServiceLocation = ServiceLocation.HOME,
     val travelFee: Double = 0.0,
-    val travelBuffer: Int = 0
+    val travelBuffer: Int = 0,
+    val durationMinutes: Int = 60
 )

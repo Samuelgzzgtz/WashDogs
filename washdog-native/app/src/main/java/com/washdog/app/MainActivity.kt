@@ -18,10 +18,12 @@ import com.washdog.app.ui.screens.AddAppointmentScreen
 import com.washdog.app.ui.screens.AddClientScreen
 import com.washdog.app.ui.screens.AgendaScreen
 import com.washdog.app.ui.screens.ClientsScreen
+import com.washdog.app.ui.screens.ContactImportScreen
 import com.washdog.app.ui.screens.EditClientScreen
 import com.washdog.app.ui.screens.DashboardScreen
 import com.washdog.app.ui.screens.ExpenseScreen
 import com.washdog.app.ui.screens.IncomeScreen
+import com.washdog.app.ui.screens.LoginScreen
 import com.washdog.app.ui.screens.ReportsScreen
 import com.washdog.app.ui.screens.SettingsScreen
 import com.washdog.app.ui.theme.WashdogTheme
@@ -38,6 +40,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun WashdogApp(vm: AppViewModel) {
+    if (!vm.isAuthenticated) {
+        LoginScreen(vm)
+        return
+    }
+
     val navController = rememberNavController()
     val backStack     by navController.currentBackStackEntryAsState()
     val currentRoute  = backStack?.destination?.route ?: "dashboard"
@@ -72,7 +79,8 @@ private fun WashdogApp(vm: AppViewModel) {
                             launchSingleTop = true
                             restoreState    = true
                         }
-                    }
+                    },
+                    onLogout          = { vm.logout() }
                 )
             }
             composable("agenda") {
@@ -102,7 +110,15 @@ private fun WashdogApp(vm: AppViewModel) {
             composable("reports")  { ReportsScreen(vm) }
             composable("income")   { IncomeScreen(vm)   { navController.popBackStack() } }
             composable("expense")  { ExpenseScreen(vm)  { navController.popBackStack() } }
-            composable("settings") { SettingsScreen(vm) { navController.popBackStack() } }
+            composable("settings") {
+                SettingsScreen(vm,
+                    onBack           = { navController.popBackStack() },
+                    onNavigateImport = { navController.navigate("contact_import") }
+                )
+            }
+            composable("contact_import") {
+                ContactImportScreen(vm) { navController.popBackStack() }
+            }
         }
     }
 }

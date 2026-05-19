@@ -19,8 +19,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SwipeToDismissBox
@@ -64,7 +66,8 @@ fun DashboardScreen(
     vm:                AppViewModel,
     onAddIncome:       () -> Unit,
     onAddExpense:      () -> Unit,
-    onNavigateClients: () -> Unit = {}
+    onNavigateClients: () -> Unit = {},
+    onLogout:          () -> Unit = {}
 ) {
     val config   = LocalConfiguration.current
     val isTablet = config.screenWidthDp >= 600
@@ -79,7 +82,18 @@ fun DashboardScreen(
             contentPadding      = PaddingValues(horizontal = ph, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            item(key = "header")  { DashboardHeader(isTablet) }
+            item(key = "header") {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DashboardHeader(isTablet)
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.Filled.Logout, contentDescription = "Cerrar sesión", tint = WDInkMute)
+                    }
+                }
+            }
             item(key = "balance") {
                 WDBalanceCard(net = vm.netBalance, income = vm.totalIncome, expense = vm.totalExpense)
             }
