@@ -54,7 +54,8 @@ class AuthRepository(
             }
             tokenStorage.saveTokens(
                 parsed.access_token,
-                parsed.refresh_token ?: "",
+                parsed.refresh_token?.takeIf { it.isNotBlank() }
+                    ?: throw Exception("Servidor no devolvió token de sesión"),
                 System.currentTimeMillis() / 1000 + (parsed.expires_in ?: 3600)
             )
         }

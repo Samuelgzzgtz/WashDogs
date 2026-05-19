@@ -7,6 +7,8 @@ class AuthRepositoryTest {
     private val storage = InMemoryTokenStorage()
     private val repo = AuthRepository("https://test.supabase.co", "testkey", storage)
 
+    @org.junit.Before fun setUp() { storage.clear() }
+
     @Test fun `isAuthenticated false when no tokens`() {
         assertFalse(repo.isAuthenticated())
     }
