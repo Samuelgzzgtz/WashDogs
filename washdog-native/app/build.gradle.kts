@@ -27,9 +27,21 @@ android {
         buildConfig = true
     }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
+    signingConfigs {
+        create("release") {
+            val ks = rootProject.file("washdog-release.jks")
+            if (ks.exists()) {
+                storeFile = ks
+                storePassword = localProps.getProperty("signing.storePassword", "")
+                keyAlias = localProps.getProperty("signing.keyAlias", "")
+                keyPassword = localProps.getProperty("signing.keyPassword", "")
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

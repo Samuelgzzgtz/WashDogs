@@ -26,11 +26,19 @@ jobs:
           key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-
 
+      - name: Decode keystore
+        working-directory: washdog-native
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > washdog-release.jks
+
       - name: Write local.properties
         working-directory: washdog-native
         run: |
           echo "supabase.url=${{ secrets.SUPABASE_URL }}" >> local.properties
           echo "supabase.anonKey=${{ secrets.SUPABASE_ANON_KEY }}" >> local.properties
+          echo "signing.storePassword=${{ secrets.STORE_PASSWORD }}" >> local.properties
+          echo "signing.keyAlias=${{ secrets.KEY_ALIAS }}" >> local.properties
+          echo "signing.keyPassword=${{ secrets.KEY_PASSWORD }}" >> local.properties
 
       - name: Lint
         working-directory: washdog-native
@@ -40,13 +48,23 @@ jobs:
         working-directory: washdog-native
         run: ./gradlew test
 
-      - name: Assemble debug APK
+      - name: Assemble release APK
         working-directory: washdog-native
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleRelease
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: washdog-debug
-          path: washdog-native/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 7
+          name: washdog-release
+          path: washdog-native/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Washdog v1.0.${{ github.run_number }}"
+          files: washdog-native/app/build/outputs/apk/release/app-release.apk
+          body: |
+            APK firmado — build #${{ github.run_number }}
