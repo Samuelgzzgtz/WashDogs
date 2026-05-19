@@ -42,13 +42,8 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     testOptions {
-        unitTests.all {
-            it.jvmArgs("-Xmx512m")
-            val cleanPath = (System.getenv("PATH") ?: "")
-                .split(";")
-                .filter { p -> !p.contains("\"") }
-                .joinToString(";")
-            it.environment("PATH", cleanPath)
+        unitTests.all { t ->
+            t.jvmArgs("-Xmx512m")
         }
     }
     lint {
