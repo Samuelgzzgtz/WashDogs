@@ -1,6 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+}
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) load(f.inputStream())
 }
 
 android {
@@ -12,9 +21,13 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "SUPABASE_URL",      "\"${localProps["SUPABASE_URL"] ?: ""}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProps["SUPABASE_ANON_KEY"] ?: ""}\"")
     }
-    buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -31,12 +44,8 @@ android {
     kotlinOptions { jvmTarget = "17" }
     lint {
         disable += setOf(
-            "OldTargetApi",
-            "AndroidGradlePluginVersion",
-            "GradleDependency",
-            "DiscouragedApi",
-            "UnusedResources",
-            "MissingApplicationIcon"
+            "OldTargetApi", "AndroidGradlePluginVersion", "GradleDependency",
+            "DiscouragedApi", "UnusedResources", "MissingApplicationIcon"
         )
         abortOnError = true
     }
@@ -55,6 +64,15 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // Supabase (mismas versiones que DocenCheck)
+    val supabaseBom = platform("io.github.jan-tennert.supabase:bom:3.1.1")
+    implementation(supabaseBom)
+    implementation("io.github.jan-tennert.supabase:postgrest-kt")
+    implementation("io.github.jan-tennert.supabase:auth-kt")
+    implementation("io.ktor:ktor-client-okhttp:3.1.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
 }
