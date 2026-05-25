@@ -1,5 +1,9 @@
 package com.washdog.app.ui.screens
 
+import android.Manifest
+import android.provider.ContactsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +17,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -29,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -50,11 +56,41 @@ fun AddClientScreen(vm: AppViewModel, onBack: () -> Unit) {
     val ph       = if (isTablet) 24.dp else 16.dp
     val maxW     = if (isTablet) 600.dp else Dp.Unspecified
 
-    var ownerName by remember { mutableStateOf("") }
-    var petName   by remember { mutableStateOf("") }
-    var breed     by remember { mutableStateOf("") }
+    var ownerName   by remember { mutableStateOf("") }
+    var petName     by remember { mutableStateOf("") }
+    var breed       by remember { mutableStateOf("") }
     var phoneDigits by remember { mutableStateOf("") }
-    var petType   by remember { mutableStateOf(PetType.DOG) }
+    var petType     by remember { mutableStateOf(PetType.DOG) }
+
+    val context = LocalContext.current
+
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickContact()
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        context.contentResolver.query(uri,
+            arrayOf(ContactsContract.Contacts.DISPLAY_NAME, ContactsContract.Contacts._ID),
+            null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                ownerName = c.getString(c.getColumnIndexOrThrow(ContactsContract.Contacts.DISPLAY_NAME))
+                val cid   = c.getString(c.getColumnIndexOrThrow(ContactsContract.Contacts._ID))
+                context.contentResolver.query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+                    "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
+                    arrayOf(cid), null)?.use { pc ->
+                    if (pc.moveToFirst()) {
+                        val raw = pc.getString(pc.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER))
+                        phoneDigits = raw.filter { it.isDigit() }.takeLast(10)
+                    }
+                }
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) contactPickerLauncher.launch(null) }
 
     Box(
         Modifier
@@ -97,7 +133,12 @@ fun AddClientScreen(vm: AppViewModel, onBack: () -> Unit) {
                     onValueChange = { ownerName = it },
                     label         = { Text("Nombre del dueño") },
                     modifier      = Modifier.fillMaxWidth(),
-                    singleLine    = true
+                    singleLine    = true,
+                    trailingIcon  = {
+                        IconButton(onClick = { permissionLauncher.launch(Manifest.permission.READ_CONTACTS) }) {
+                            Icon(Icons.Default.Contacts, contentDescription = "Importar contacto", tint = WDPrimary)
+                        }
+                    }
                 )
             }
             item(key = "petName") {

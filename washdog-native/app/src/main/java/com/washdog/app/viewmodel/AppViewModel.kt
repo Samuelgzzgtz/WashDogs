@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.washdog.app.data.AppRepository
+import com.washdog.app.data.AuthRepository
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.util.OverlapChecker
 import com.washdog.app.data.models.ApptStatus
@@ -19,64 +20,117 @@ import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
-    private val repo = AppRepository(application)
+
+    private val repo     = AppRepository(application)
+    private val authRepo = AuthRepository()
 
     val transactions  = mutableStateListOf<Transaction>()
     val clients       = mutableStateListOf<Client>()
     val appointments  = mutableStateListOf<Appointment>()
 
-    var tplWelcome    by mutableStateOf(AppRepository.DEFAULT_WELCOME)
-        private set
-    var tplConfirm    by mutableStateOf(AppRepository.DEFAULT_CONFIRM)
-        private set
-    var tplReschedule by mutableStateOf(AppRepository.DEFAULT_RESCHEDULE)
-        private set
+    var tplWelcome    by mutableStateOf(AppRepository.DEFAULT_WELCOME);    private set
+    var tplConfirm    by mutableStateOf(AppRepository.DEFAULT_CONFIRM);    private set
+    var tplReschedule by mutableStateOf(AppRepository.DEFAULT_RESCHEDULE); private set
 
-    var overlapConflict by mutableStateOf<Appointment?>(null)
-        private set
+    var overlapConflict by mutableStateOf<Appointment?>(null); private set
 
-    init { viewModelScope.launch { loadData() } }
+    var isLoggedIn  by mutableStateOf(authRepo.hasActiveSession()); private set
+    var isLoggingIn by mutableStateOf(false);                       private set
 
-    private suspend fun loadData() {
-        val initialized = repo.isInitialized()
-        val savedTx     = repo.loadTransactions()
-        val savedCl     = repo.loadClients()
-        val savedAppt   = repo.loadAppointments()
-        val (w, c, r)   = repo.loadTemplates()
-
-        if (!initialized) {
-            // Primera vez: carga seeds y marca como inicializado
-            loadSeedTransactions()
-            loadSeedClients()
-            loadSeedAppointments()
-            repo.markInitialized()
-        } else {
-            // Cargas normales — lista vacía es válida (el usuario borró todo)
-            transactions.addAll(savedTx)
-            clients.addAll(savedCl)
-            appointments.addAll(savedAppt)
+    init {
+        if (isLoggedIn) {
+            viewModelScope.launch { loadData() }
         }
-
-        tplWelcome    = w
-        tplConfirm    = c
-        tplReschedule = r
     }
 
-    // repo.save*() ya no es suspend — lanza en su propio saveScope (no en viewModelScope)
+    // ── AUTH ──────────────────────────────────────────────────────────────────
+
+    fun login(email: String, password: String, onError: (String) -> Unit) {
+        isLoggingIn = true
+        viewModelScope.launch {
+            try {
+                authRepo.login(email, password)
+                loadData()
+                isLoggedIn = true
+            } catch (e: Exception) {
+                onError(e.message ?: "Error al iniciar sesión")
+            } finally {
+                isLoggingIn = false
+            }
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            try { authRepo.logout() } catch (_: Exception) {}
+            transactions.clear()
+            clients.clear()
+            appointments.clear()
+            isLoggedIn = false
+        }
+    }
+
+    // ── LOAD DATA ─────────────────────────────────────────────────────────────
+
+    private suspend fun loadData() {
+        val cloud = try { repo.loadFromCloud() } catch (_: Exception) { null }
+
+        if (cloud != null && (cloud.clients.isNotEmpty() || cloud.appointments.isNotEmpty() || cloud.transactions.isNotEmpty())) {
+            transactions.clear(); transactions.addAll(cloud.transactions)
+            clients.clear();      clients.addAll(cloud.clients)
+            appointments.clear(); appointments.addAll(cloud.appointments)
+            repo.saveTransactions(transactions.toList())
+            repo.saveClients(clients.toList())
+            repo.saveAppointments(appointments.toList())
+            cloud.settings?.let {
+                tplWelcome = it.tplWelcome; tplConfirm = it.tplConfirm; tplReschedule = it.tplReschedule
+                repo.saveTemplates(tplWelcome, tplConfirm, tplReschedule)
+            }
+            repo.markInitialized()
+        } else {
+            val initialized = repo.isInitialized()
+            val savedTx   = repo.loadTransactions()
+            val savedCl   = repo.loadClients()
+            val savedAppt = repo.loadAppointments()
+            val (w, c, r) = repo.loadTemplates()
+
+            if (!initialized) {
+                loadSeedTransactions(); loadSeedClients(); loadSeedAppointments()
+                repo.markInitialized()
+                viewModelScope.launch {
+                    try {
+                        repo.syncClientsToCloud(clients.toList())
+                        repo.syncAppointmentsToCloud(appointments.toList())
+                        repo.syncTransactionsToCloud(transactions.toList())
+                    } catch (_: Exception) {}
+                }
+            } else {
+                transactions.addAll(savedTx)
+                clients.addAll(savedCl)
+                appointments.addAll(savedAppt)
+            }
+            tplWelcome = w; tplConfirm = c; tplReschedule = r
+        }
+    }
+
+    // ── MUTATIONS + CLOUD SYNC ────────────────────────────────────────────────
 
     fun addTransaction(t: Transaction) {
         transactions.add(0, t)
         repo.saveTransactions(transactions.toList())
+        viewModelScope.launch { try { repo.syncTransactionsToCloud(transactions.toList()) } catch (_: Exception) {} }
     }
 
     fun deleteTransaction(transactionId: String) {
         transactions.removeAll { it.id == transactionId }
         repo.saveTransactions(transactions.toList())
+        viewModelScope.launch { try { repo.deleteTransactionFromCloud(transactionId) } catch (_: Exception) {} }
     }
 
     fun addClient(c: Client) {
         clients.add(c)
         repo.saveClients(clients.toList())
+        viewModelScope.launch { try { repo.syncClientsToCloud(clients.toList()) } catch (_: Exception) {} }
     }
 
     fun updateClient(updated: Client) {
@@ -84,6 +138,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (idx >= 0) {
             clients[idx] = updated
             repo.saveClients(clients.toList())
+            viewModelScope.launch { try { repo.syncClientsToCloud(clients.toList()) } catch (_: Exception) {} }
         }
     }
 
@@ -93,11 +148,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (name != null) appointments.removeAll { it.clientName == name }
         repo.saveClients(clients.toList())
         repo.saveAppointments(appointments.toList())
+        viewModelScope.launch {
+            try {
+                repo.deleteClientFromCloud(clientId)
+                if (name != null) repo.syncAppointmentsToCloud(appointments.toList())
+            } catch (_: Exception) {}
+        }
     }
 
     fun addAppointment(a: Appointment) {
         appointments.add(a)
         repo.saveAppointments(appointments.toList())
+        viewModelScope.launch { try { repo.syncAppointmentsToCloud(appointments.toList()) } catch (_: Exception) {} }
     }
 
     fun updateAppointment(updated: Appointment) {
@@ -105,19 +167,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (idx >= 0) {
             appointments[idx] = updated
             repo.saveAppointments(appointments.toList())
+            viewModelScope.launch { try { repo.syncAppointmentsToCloud(appointments.toList()) } catch (_: Exception) {} }
         }
     }
 
     fun deleteAppointment(appointmentId: String) {
         appointments.removeAll { it.id == appointmentId }
         repo.saveAppointments(appointments.toList())
+        viewModelScope.launch { try { repo.deleteAppointmentFromCloud(appointmentId) } catch (_: Exception) {} }
     }
 
     fun updateTemplates(welcome: String, confirm: String, reschedule: String) {
-        tplWelcome    = welcome
-        tplConfirm    = confirm
-        tplReschedule = reschedule
+        tplWelcome = welcome; tplConfirm = confirm; tplReschedule = reschedule
         repo.saveTemplates(welcome, confirm, reschedule)
+        viewModelScope.launch { try { repo.syncSettingsToCloud(welcome, confirm, reschedule) } catch (_: Exception) {} }
     }
 
     fun checkOverlap(candidate: Appointment) {
@@ -125,7 +188,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                           else OverlapChecker.findConflict(candidate, appointments)
     }
 
-    // ── Computed ─────────────────────────────────────────────────────────────
+    // ── COMPUTED ──────────────────────────────────────────────────────────────
 
     val totalIncome:  Double get() = transactions.filter { it.type == TxType.IN  }.sumOf { it.amount }
     val totalExpense: Double get() = transactions.filter { it.type == TxType.OUT }.sumOf { it.amount }
@@ -141,7 +204,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) { 0L }
     }
 
-    // ── Seed data (primer arranque) ───────────────────────────────────────────
+    // ── SEED DATA ─────────────────────────────────────────────────────────────
 
     private fun loadSeedTransactions() {
         transactions.addAll(listOf(

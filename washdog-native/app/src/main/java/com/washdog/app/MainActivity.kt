@@ -22,6 +22,7 @@ import com.washdog.app.ui.screens.EditClientScreen
 import com.washdog.app.ui.screens.DashboardScreen
 import com.washdog.app.ui.screens.ExpenseScreen
 import com.washdog.app.ui.screens.IncomeScreen
+import com.washdog.app.ui.screens.LoginScreen
 import com.washdog.app.ui.screens.ReportsScreen
 import com.washdog.app.ui.screens.SettingsScreen
 import com.washdog.app.ui.theme.WashdogTheme
@@ -38,6 +39,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun WashdogApp(vm: AppViewModel) {
+    if (!vm.isLoggedIn) {
+        LoginScreen(vm = vm)
+        return
+    }
+
     val navController = rememberNavController()
     val backStack     by navController.currentBackStackEntryAsState()
     val currentRoute  = backStack?.destination?.route ?: "dashboard"
