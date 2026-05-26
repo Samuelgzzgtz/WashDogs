@@ -11,7 +11,13 @@ object WhatsAppHelper {
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(intent)
+        try {
+            context.startActivity(intent)
+        } catch (_: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(
+                context, "WhatsApp no está instalado", android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     fun interpolate(template: String, name: String, fecha: String = "", hora: String = ""): String =

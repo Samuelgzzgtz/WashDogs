@@ -1,5 +1,5 @@
 -- WashDogs — migración completa (drop + create + RLS)
--- Pegar en: supabase.com/dashboard/project/SUPABASE_PROJECT_ID/sql/new
+-- Pegar en: Supabase Dashboard → SQL Editor
 
 -- ── 1. Limpiar ────────────────────────────────────────────────────────────────
 drop table if exists user_settings cascade;

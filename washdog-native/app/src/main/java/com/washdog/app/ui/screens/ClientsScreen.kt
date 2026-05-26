@@ -109,17 +109,6 @@ fun ClientsScreen(vm: AppViewModel, onNavigateSettings: () -> Unit, onAddClient:
     }
 
     Box(Modifier.fillMaxSize().background(WDBg)) {
-        FloatingActionButton(
-            onClick        = onAddClient,
-            modifier       = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-                .size(56.dp),
-            containerColor = WDPrimary,
-            contentColor   = Color.White
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = null)
-        }
         LazyColumn(
             modifier            = Modifier
                 .widthIn(max = maxW)
@@ -203,6 +192,17 @@ fun ClientsScreen(vm: AppViewModel, onNavigateSettings: () -> Unit, onAddClient:
                 )
             }
             item(key = "bottom_space") { Spacer(Modifier.height(80.dp)) }
+        }
+        FloatingActionButton(
+            onClick        = onAddClient,
+            modifier       = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+                .size(56.dp),
+            containerColor = WDPrimary,
+            contentColor   = Color.White
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null)
         }
     }
 }

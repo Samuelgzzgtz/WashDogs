@@ -1,0 +1,39 @@
+#!/bin/sh
+# Pre-commit hook: bloquea credenciales antes de que lleguen al historial.
+# Activar con: git config core.hooksPath .githooks
+
+STAGED=$(git diff --cached --name-only)
+
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+FAIL=0
+
+check_pattern() {
+  local pattern="$1"
+  local label="$2"
+  if git diff --cached | grep -qE "$pattern"; then
+    echo "❌  BLOQUEADO: se detectó $label en los cambios staged."
+    FAIL=1
+  fi
+}
+
+# URLs de Supabase
+check_pattern "[a-z0-9]{20,}\.supabase\.co" "URL de Supabase"
+
+# JWT / anon keys (empiezan con eyJ)
+check_pattern '"eyJ[A-Za-z0-9_-]{20,}' "JWT / API key"
+
+# Project IDs de Supabase (26 chars alfanuméricos en minúsculas en una URL conocida)
+check_pattern "supabase\.com/dashboard/project/[a-z0-9]+" "project ID de Supabase en URL"
+
+if [ "$FAIL" -eq 1 ]; then
+  echo ""
+  echo "El commit fue bloqueado por el pre-commit hook de seguridad."
+  echo "Mueve las credenciales a local.properties (gitignoreado) o a GitHub Secrets."
+  echo "Para saltarlo en casos justificados: git commit --no-verify"
+  exit 1
+fi
+
+exit 0

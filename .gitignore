@@ -12,3 +12,13 @@ Thumbs.db
 
 # Claude
 .claude/
+
+# Secretos — nunca commitear
+*.env
+*.env.local
+*.env.production
+secrets.properties
+*service_role*
+*service-role*
+*anon_key*
+*anon-key*
