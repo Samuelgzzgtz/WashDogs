@@ -34,12 +34,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     var overlapConflict by mutableStateOf<Appointment?>(null); private set
 
-    var isLoggedIn  by mutableStateOf(authRepo.hasActiveSession()); private set
-    var isLoggingIn by mutableStateOf(false);                       private set
+    var isLoggedIn     by mutableStateOf(false); private set
+    var isLoggingIn    by mutableStateOf(false); private set
+    var sessionLoading by mutableStateOf(true);  private set
 
     init {
-        if (isLoggedIn) {
-            viewModelScope.launch { loadData() }
+        // B1: la sesión persistida se carga de disco de forma asíncrona; esperamos a
+        // que supabase-kt termine antes de decidir la pantalla, en vez de leerla
+        // síncronamente (que devolvía null por la carrera y forzaba re-login siempre).
+        viewModelScope.launch {
+            try { authRepo.awaitInitialization() } catch (_: Exception) {}
+            isLoggedIn = authRepo.hasActiveSession()
+            if (isLoggedIn) loadData()
+            sessionLoading = false
         }
     }
 
@@ -73,44 +80,75 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── LOAD DATA ─────────────────────────────────────────────────────────────
 
     private suspend fun loadData() {
+        // 1) Local primero: es la fuente de verdad de lo que el usuario capturó en este
+        //    dispositivo (incluye registros que aún no se sincronizaron a la nube).
+        val localTx   = repo.loadTransactions()
+        val localCl   = repo.loadClients()
+        val localAppt = repo.loadAppointments()
+        val (localW, localC, localR) = repo.loadTemplates()
+        val initialized = repo.isInitialized()
+
+        // 2) Nube (puede ser null si no hay red o falla).
         val cloud = try { repo.loadFromCloud() } catch (_: Exception) { null }
 
-        if (cloud != null && (cloud.clients.isNotEmpty() || cloud.appointments.isNotEmpty() || cloud.transactions.isNotEmpty())) {
-            transactions.clear(); transactions.addAll(cloud.transactions)
-            clients.clear();      clients.addAll(cloud.clients)
-            appointments.clear(); appointments.addAll(cloud.appointments)
-            repo.saveTransactions(transactions.toList())
-            repo.saveClients(clients.toList())
-            repo.saveAppointments(appointments.toList())
-            cloud.settings?.let {
-                tplWelcome = it.tplWelcome; tplConfirm = it.tplConfirm; tplReschedule = it.tplReschedule
-                repo.saveTemplates(tplWelcome, tplConfirm, tplReschedule)
-            }
-            repo.markInitialized()
-        } else {
-            val initialized = repo.isInitialized()
-            val savedTx   = repo.loadTransactions()
-            val savedCl   = repo.loadClients()
-            val savedAppt = repo.loadAppointments()
-            val (w, c, r) = repo.loadTemplates()
+        // 3) Merge no destructivo por id (B2): unión local ∪ nube. En conflicto de id
+        //    gana lo LOCAL, para no pisar ediciones recién hechas que aún no subieron.
+        //    Garantiza cero pérdida de datos del usuario (rule #3).
+        val finalCl   = mergeById(localCl,   cloud?.clients      ?: emptyList()) { it.id }
+        val finalAppt = mergeById(localAppt, cloud?.appointments ?: emptyList()) { it.id }
+        val finalTx   = mergeById(localTx,   cloud?.transactions ?: emptyList()) { it.id }
 
-            if (!initialized) {
-                loadSeedTransactions(); loadSeedClients(); loadSeedAppointments()
-                repo.markInitialized()
-                viewModelScope.launch {
-                    try {
-                        repo.syncClientsToCloud(clients.toList())
-                        repo.syncAppointmentsToCloud(appointments.toList())
-                        repo.syncTransactionsToCloud(transactions.toList())
-                    } catch (_: Exception) {}
-                }
-            } else {
-                transactions.addAll(savedTx)
-                clients.addAll(savedCl)
-                appointments.addAll(savedAppt)
+        // Plantillas: la nube gana si existe, si no, lo local.
+        cloud?.settings?.let {
+            tplWelcome = it.tplWelcome; tplConfirm = it.tplConfirm; tplReschedule = it.tplReschedule
+        } ?: run { tplWelcome = localW; tplConfirm = localC; tplReschedule = localR }
+
+        val everythingEmpty = finalCl.isEmpty() && finalAppt.isEmpty() && finalTx.isEmpty()
+
+        if (everythingEmpty && !initialized) {
+            // Primer arranque real: sembrar demo y subir a la nube.
+            loadSeedTransactions(); loadSeedClients(); loadSeedAppointments()
+            repo.markInitialized()
+            viewModelScope.launch {
+                try {
+                    repo.syncClientsToCloud(clients.toList())
+                    repo.syncAppointmentsToCloud(appointments.toList())
+                    repo.syncTransactionsToCloud(transactions.toList())
+                } catch (_: Exception) {}
             }
-            tplWelcome = w; tplConfirm = c; tplReschedule = r
+            return
         }
+
+        // 4) Publicar merge en UI y persistir local.
+        transactions.clear(); transactions.addAll(finalTx)
+        clients.clear();      clients.addAll(finalCl)
+        appointments.clear(); appointments.addAll(finalAppt)
+        repo.saveTransactions(finalTx)
+        repo.saveClients(finalCl)
+        repo.saveAppointments(finalAppt)
+        repo.saveTemplates(tplWelcome, tplConfirm, tplReschedule)
+        repo.markInitialized()
+
+        // 5) Subir el merge a la nube: los registros que estaban SOLO en local se
+        //    sincronizan (antes se descartaban silenciosamente al pisar con la nube).
+        if (cloud != null) {
+            viewModelScope.launch {
+                try {
+                    repo.syncClientsToCloud(finalCl)
+                    repo.syncAppointmentsToCloud(finalAppt)
+                    repo.syncTransactionsToCloud(finalTx)
+                    repo.syncSettingsToCloud(tplWelcome, tplConfirm, tplReschedule)
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    /** Unión por id: primero la nube, luego lo local lo sobrescribe (local gana en conflicto). */
+    private inline fun <T> mergeById(local: List<T>, cloud: List<T>, id: (T) -> String): List<T> {
+        val byId = LinkedHashMap<String, T>()
+        cloud.forEach { byId[id(it)] = it }
+        local.forEach { byId[id(it)] = it }
+        return byId.values.toList()
     }
 
     // ── MUTATIONS + CLOUD SYNC ────────────────────────────────────────────────

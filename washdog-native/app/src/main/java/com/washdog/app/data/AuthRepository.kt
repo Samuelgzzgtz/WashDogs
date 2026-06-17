@@ -7,6 +7,9 @@ class AuthRepository {
 
     private val auth get() = WashdogSupabase.client.auth
 
+    /** Espera a que supabase-kt termine de cargar la sesión persistida desde disco. */
+    suspend fun awaitInitialization() = auth.awaitInitialization()
+
     fun hasActiveSession(): Boolean = auth.currentSessionOrNull() != null
 
     fun currentUserId(): String? = auth.currentUserOrNull()?.id
