@@ -80,6 +80,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── LOAD DATA ─────────────────────────────────────────────────────────────
 
     private suspend fun loadData() {
+        // 0) Migración única: si venimos de una versión con caché local sin namespace,
+        //    asignar esos datos al usuario actual antes de leer (cero pérdida; evita que
+        //    los datos de una cuenta contaminen otra en el mismo dispositivo).
+        repo.migrateLegacyToCurrentUserIfNeeded()
+
         // 1) Local primero: es la fuente de verdad de lo que el usuario capturó en este
         //    dispositivo (incluye registros que aún no se sincronizaron a la nube).
         val localTx   = repo.loadTransactions()

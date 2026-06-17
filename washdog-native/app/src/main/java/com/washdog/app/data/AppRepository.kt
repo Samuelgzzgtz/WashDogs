@@ -25,83 +25,139 @@ class AppRepository(private val context: Context) {
     private val gson      = Gson()
     private val saveScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val KEY_TX             = stringPreferencesKey("transactions")
-    private val KEY_CL             = stringPreferencesKey("clients")
-    private val KEY_APPT           = stringPreferencesKey("appointments")
-    private val KEY_TPL_WELCOME    = stringPreferencesKey("tpl_welcome")
-    private val KEY_TPL_CONFIRM    = stringPreferencesKey("tpl_confirm")
-    private val KEY_TPL_RESCHEDULE = stringPreferencesKey("tpl_reschedule")
-    private val KEY_INITIALIZED    = booleanPreferencesKey("initialized")
+    // Claves de negocio particionadas por usuario (washdog_prefs es compartido por
+    // todas las cuentas del dispositivo; el namespace por uid las aísla).
+    private fun keyTx(u: String?)   = stringPreferencesKey(LocalKeys.scoped("transactions", u))
+    private fun keyCl(u: String?)   = stringPreferencesKey(LocalKeys.scoped("clients", u))
+    private fun keyAppt(u: String?) = stringPreferencesKey(LocalKeys.scoped("appointments", u))
+    private fun keyW(u: String?)    = stringPreferencesKey(LocalKeys.scoped("tpl_welcome", u))
+    private fun keyC(u: String?)    = stringPreferencesKey(LocalKeys.scoped("tpl_confirm", u))
+    private fun keyR(u: String?)    = stringPreferencesKey(LocalKeys.scoped("tpl_reschedule", u))
+    private fun keyInit(u: String?) = booleanPreferencesKey(LocalKeys.scoped("initialized", u))
+
+    // Claves legacy (sin namespace, pre v1.1.x) — solo para la migración única.
+    private val KEY_LEGACY_MIGRATED = booleanPreferencesKey("legacy_migrated")
 
     companion object {
         const val DEFAULT_WELCOME    = "Hola {{nombre}}, bienvenido/a. Estamos felices de tenerte con nosotros. 😊"
         const val DEFAULT_CONFIRM    = "Hola {{nombre}}, confirmamos tu cita para el {{fecha}} a las {{hora}}. ¡Te esperamos!"
         const val DEFAULT_RESCHEDULE = "Hola {{nombre}}, queremos coordinar una nueva fecha para tu cita. ¿Cuándo te queda bien?"
+
+        // Bases de string que se migran de legacy → namespace del usuario.
+        private val LEGACY_STRING_BASES = listOf(
+            "transactions", "clients", "appointments",
+            "tpl_welcome", "tpl_confirm", "tpl_reschedule"
+        )
+        private const val BASE_INITIALIZED = "initialized"
+    }
+
+    // ── LEGACY MIGRATION ──────────────────────────────────────────────────────
+
+    /**
+     * Migración única: asigna los datos locales legacy (sin namespace) al usuario
+     * logueado actual —dueño de esos datos antes de la actualización— y borra las
+     * claves legacy. Idempotente vía flag global [KEY_LEGACY_MIGRATED]. Garantiza
+     * cero pérdida de datos al actualizar a la caché por usuario (rule #3).
+     */
+    suspend fun migrateLegacyToCurrentUserIfNeeded() {
+        val u = userId() ?: return
+        try {
+            context.dataStore.edit { p ->
+                if (p[KEY_LEGACY_MIGRATED] == true) return@edit
+
+                val legacyPresent = LEGACY_STRING_BASES
+                    .filter { p[stringPreferencesKey(it)] != null }.toSet()
+                val scopedPresent = LEGACY_STRING_BASES
+                    .filter { p[stringPreferencesKey(LocalKeys.scoped(it, u))] != null }.toSet()
+                val toCopy = LocalKeys.basesToCopy(LEGACY_STRING_BASES, legacyPresent, scopedPresent).toSet()
+
+                for (base in LEGACY_STRING_BASES) {
+                    val legacyKey = stringPreferencesKey(base)
+                    if (base in toCopy) {
+                        p[stringPreferencesKey(LocalKeys.scoped(base, u))] = p[legacyKey]!!
+                    }
+                    p.remove(legacyKey)
+                }
+
+                val legacyInit = booleanPreferencesKey(BASE_INITIALIZED)
+                val scopedInit = booleanPreferencesKey(LocalKeys.scoped(BASE_INITIALIZED, u))
+                p[legacyInit]?.let { if (p[scopedInit] == null) p[scopedInit] = it }
+                p.remove(legacyInit)
+
+                p[KEY_LEGACY_MIGRATED] = true
+            }
+        } catch (e: Exception) { /* best-effort; si falla, se reintenta el próximo arranque */ }
     }
 
     // ── LOCAL SAVES ───────────────────────────────────────────────────────────
 
     fun saveTransactions(list: List<Transaction>) {
-        saveScope.launch { context.dataStore.edit { it[KEY_TX] = gson.toJson(list) } }
+        val u = userId()
+        saveScope.launch { context.dataStore.edit { it[keyTx(u)] = gson.toJson(list) } }
     }
 
     fun saveClients(list: List<Client>) {
-        saveScope.launch { context.dataStore.edit { it[KEY_CL] = gson.toJson(list) } }
+        val u = userId()
+        saveScope.launch { context.dataStore.edit { it[keyCl(u)] = gson.toJson(list) } }
     }
 
     fun saveAppointments(list: List<Appointment>) {
-        saveScope.launch { context.dataStore.edit { it[KEY_APPT] = gson.toJson(list) } }
+        val u = userId()
+        saveScope.launch { context.dataStore.edit { it[keyAppt(u)] = gson.toJson(list) } }
     }
 
     fun saveTemplates(welcome: String, confirm: String, reschedule: String) {
+        val u = userId()
         saveScope.launch {
             context.dataStore.edit { prefs ->
-                prefs[KEY_TPL_WELCOME]    = welcome
-                prefs[KEY_TPL_CONFIRM]    = confirm
-                prefs[KEY_TPL_RESCHEDULE] = reschedule
+                prefs[keyW(u)] = welcome
+                prefs[keyC(u)] = confirm
+                prefs[keyR(u)] = reschedule
             }
         }
     }
 
     fun markInitialized() {
-        saveScope.launch { context.dataStore.edit { it[KEY_INITIALIZED] = true } }
+        val u = userId()
+        saveScope.launch { context.dataStore.edit { it[keyInit(u)] = true } }
     }
 
     // ── LOCAL LOADS ───────────────────────────────────────────────────────────
 
     suspend fun isInitialized(): Boolean {
-        return try { context.dataStore.data.first()[KEY_INITIALIZED] == true }
+        return try { context.dataStore.data.first()[keyInit(userId())] == true }
         catch (e: Exception) { false }
     }
 
     suspend fun loadTransactions(): List<Transaction> {
         return try {
-            val json = context.dataStore.data.first()[KEY_TX] ?: return emptyList()
+            val json = context.dataStore.data.first()[keyTx(userId())] ?: return emptyList()
             gson.fromJson(json, object : TypeToken<List<Transaction>>() {}.type)
         } catch (e: Exception) { emptyList() }
     }
 
     suspend fun loadClients(): List<Client> {
         return try {
-            val json = context.dataStore.data.first()[KEY_CL] ?: return emptyList()
+            val json = context.dataStore.data.first()[keyCl(userId())] ?: return emptyList()
             gson.fromJson(json, object : TypeToken<List<Client>>() {}.type)
         } catch (e: Exception) { emptyList() }
     }
 
     suspend fun loadAppointments(): List<Appointment> {
         return try {
-            val json = context.dataStore.data.first()[KEY_APPT] ?: return emptyList()
+            val json = context.dataStore.data.first()[keyAppt(userId())] ?: return emptyList()
             gson.fromJson(json, object : TypeToken<List<Appointment>>() {}.type)
         } catch (e: Exception) { emptyList() }
     }
 
     suspend fun loadTemplates(): Triple<String, String, String> {
         return try {
+            val u = userId()
             val prefs = context.dataStore.data.first()
             Triple(
-                prefs[KEY_TPL_WELCOME]    ?: DEFAULT_WELCOME,
-                prefs[KEY_TPL_CONFIRM]    ?: DEFAULT_CONFIRM,
-                prefs[KEY_TPL_RESCHEDULE] ?: DEFAULT_RESCHEDULE
+                prefs[keyW(u)] ?: DEFAULT_WELCOME,
+                prefs[keyC(u)] ?: DEFAULT_CONFIRM,
+                prefs[keyR(u)] ?: DEFAULT_RESCHEDULE
             )
         } catch (e: Exception) { Triple(DEFAULT_WELCOME, DEFAULT_CONFIRM, DEFAULT_RESCHEDULE) }
     }
