@@ -8,5 +8,7 @@ data class Transaction(
     val amount: Double,
     val concept: String,
     val detail: String,
-    val dateTime: String
+    val dateTime: String,
+    // Marca de última modificación (ISO-8601 instant) para el merge last-write-wins.
+    val updatedAt: String = ""
 )

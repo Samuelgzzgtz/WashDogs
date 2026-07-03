@@ -13,11 +13,14 @@ import com.washdog.app.data.CredentialStore
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.util.OverlapChecker
 import com.washdog.app.util.Recurrence
+import com.washdog.app.util.SyncMerge
 import com.washdog.app.data.models.ApptStatus
 import com.washdog.app.data.models.Client
 import com.washdog.app.data.models.PetType
+import com.washdog.app.data.models.Tombstone
 import com.washdog.app.data.models.Transaction
 import com.washdog.app.data.models.TxType
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.launch
@@ -41,6 +44,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var isLoggedIn     by mutableStateOf(false); private set
     var isLoggingIn    by mutableStateOf(false); private set
     var sessionLoading by mutableStateOf(true);  private set
+
+    /** true si hay cambios locales que no se han podido subir a la nube todavía. */
+    var pendingSync    by mutableStateOf(false); private set
+
+    // Tombstones (borrados) conocidos localmente, para propagarlos y filtrar el merge.
+    private val tombstones = mutableListOf<Tombstone>()
+
+    private fun now(): String = Instant.now().toString()
 
     init {
         // B1: la sesión persistida se carga de disco de forma asíncrona; esperamos a
@@ -83,6 +94,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             transactions.clear()
             clients.clear()
             appointments.clear()
+            tombstones.clear()
             isLoggedIn = false
         }
     }
@@ -112,17 +124,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val (localW, localC, localR) = repo.loadTemplates()
         val initialized = repo.isInitialized()
 
+        val localTombstones = repo.loadTombstones()
+        pendingSync = repo.isUnsynced()
+
         // 2) Nube (puede ser null si no hay red o falla).
         val cloud = try { repo.loadFromCloud() } catch (_: Exception) { null }
 
-        // 3) Merge no destructivo por id (B2): unión local ∪ nube. En conflicto de id
-        //    gana lo LOCAL, para no pisar ediciones recién hechas que aún no subieron.
-        //    Garantiza cero pérdida de datos del usuario (rule #3).
-        val finalCl   = mergeById(localCl,   cloud?.clients      ?: emptyList()) { it.id }
-        val mergedAppt = mergeById(localAppt, cloud?.appointments ?: emptyList()) { it.id }
-        // Rellena ocurrencias futuras de series recurrentes para que sigan en el calendario.
+        // 3) Tombstones: unión local ∪ nube, quedándose con la fecha de borrado más
+        //    reciente por (entidad, id). Se propagan los borrados entre dispositivos.
+        val allTombstones = mergeTombstones(localTombstones, cloud?.tombstones ?: emptyList())
+        tombstones.clear(); tombstones.addAll(allTombstones)
+
+        // 4) Merge last-write-wins por `updatedAt` y aplicación de tombstones (v1.3.0):
+        //    el registro más recientemente editado gana; los borrados se respetan salvo
+        //    que el registro se haya editado después de borrarse.
+        val finalCl = SyncMerge.applyTombstones(
+            SyncMerge.mergeByUpdatedAt(localCl, cloud?.clients ?: emptyList(), { it.id }, { it.updatedAt }),
+            tombstoneMap("clients"), { it.id }, { it.updatedAt }
+        )
+        val mergedAppt = SyncMerge.applyTombstones(
+            SyncMerge.mergeByUpdatedAt(localAppt, cloud?.appointments ?: emptyList(), { it.id }, { it.updatedAt }),
+            tombstoneMap("appointments"), { it.id }, { it.updatedAt }
+        )
         val finalAppt = topUpRecurringSeries(mergedAppt)
-        val finalTx   = mergeById(localTx,   cloud?.transactions ?: emptyList()) { it.id }
+        val finalTx = SyncMerge.applyTombstones(
+            SyncMerge.mergeByUpdatedAt(localTx, cloud?.transactions ?: emptyList(), { it.id }, { it.updatedAt }),
+            tombstoneMap("transactions"), { it.id }, { it.updatedAt }
+        )
 
         // Plantillas: la nube gana si existe, si no, lo local.
         cloud?.settings?.let {
@@ -131,21 +159,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         val everythingEmpty = finalCl.isEmpty() && finalAppt.isEmpty() && finalTx.isEmpty()
 
-        if (everythingEmpty && !initialized) {
+        if (everythingEmpty && !initialized && allTombstones.isEmpty()) {
             // Primer arranque real: sembrar demo y subir a la nube.
             loadSeedTransactions(); loadSeedClients(); loadSeedAppointments()
             repo.markInitialized()
-            viewModelScope.launch {
-                try {
-                    repo.syncClientsToCloud(clients.toList())
-                    repo.syncAppointmentsToCloud(appointments.toList())
-                    repo.syncTransactionsToCloud(transactions.toList())
-                } catch (_: Exception) {}
-            }
+            pushToCloud()
             return
         }
 
-        // 4) Publicar merge en UI y persistir local.
+        // 5) Publicar merge en UI y persistir local.
         transactions.clear(); transactions.addAll(finalTx)
         clients.clear();      clients.addAll(finalCl)
         appointments.clear(); appointments.addAll(finalAppt)
@@ -153,78 +175,118 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         repo.saveClients(finalCl)
         repo.saveAppointments(finalAppt)
         repo.saveTemplates(tplWelcome, tplConfirm, tplReschedule)
+        repo.saveTombstones(allTombstones)
         repo.markInitialized()
 
-        // 5) Subir el merge a la nube: los registros que estaban SOLO en local se
-        //    sincronizan (antes se descartaban silenciosamente al pisar con la nube).
-        if (cloud != null) {
-            viewModelScope.launch {
-                try {
-                    repo.syncClientsToCloud(finalCl)
-                    repo.syncAppointmentsToCloud(finalAppt)
-                    repo.syncTransactionsToCloud(finalTx)
-                    repo.syncSettingsToCloud(tplWelcome, tplConfirm, tplReschedule)
-                } catch (_: Exception) {}
+        // 6) Subir el merge a la nube. Si no había conexión (cloud == null) o falla,
+        //    se marca pendiente de sincronizar para el indicador de la UI.
+        if (cloud != null) pushToCloud() else { pendingSync = true; repo.setUnsynced(true) }
+    }
+
+    /** Sube el estado local completo a la nube; ajusta [pendingSync] según el resultado. */
+    private fun pushToCloud() {
+        viewModelScope.launch {
+            try {
+                repo.syncClientsToCloud(clients.toList())
+                repo.syncAppointmentsToCloud(appointments.toList())
+                repo.syncTransactionsToCloud(transactions.toList())
+                repo.syncSettingsToCloud(tplWelcome, tplConfirm, tplReschedule)
+                repo.syncTombstonesToCloud(tombstones.toList())
+                pendingSync = false; repo.setUnsynced(false)
+            } catch (_: Exception) {
+                pendingSync = true; repo.setUnsynced(true)
             }
         }
     }
 
-    /** Unión por id: primero la nube, luego lo local lo sobrescribe (local gana en conflicto). */
-    private inline fun <T> mergeById(local: List<T>, cloud: List<T>, id: (T) -> String): List<T> {
-        val byId = LinkedHashMap<String, T>()
-        cloud.forEach { byId[id(it)] = it }
-        local.forEach { byId[id(it)] = it }
-        return byId.values.toList()
+    /** Reintenta subir los cambios pendientes (para el botón "reintentar" del indicador). */
+    fun retrySync() = pushToCloud()
+
+    // Unión de tombstones: mayor deletedAt por (entidad, id).
+    private fun mergeTombstones(a: List<Tombstone>, b: List<Tombstone>): List<Tombstone> {
+        val byKey = LinkedHashMap<String, Tombstone>()
+        (a + b).forEach { t ->
+            val key = "${t.entity}|${t.entityId}"
+            val cur = byKey[key]
+            if (cur == null || t.deletedAt > cur.deletedAt) byKey[key] = t
+        }
+        return byKey.values.toList()
     }
+
+    private fun tombstoneMap(entity: String): Map<String, String> =
+        tombstones.filter { it.entity == entity }.associate { it.entityId to it.deletedAt }
 
     // ── MUTATIONS + CLOUD SYNC ────────────────────────────────────────────────
 
+    /** Lanza un sync a la nube; si falla, marca cambios pendientes para el indicador. */
+    private fun fireSync(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try { block() } catch (_: Exception) { pendingSync = true; repo.setUnsynced(true) }
+        }
+    }
+
+    /** Registra un borrado como tombstone (local + nube) para propagarlo entre dispositivos. */
+    private fun addTombstone(entity: String, id: String) {
+        tombstones.removeAll { it.entity == entity && it.entityId == id }
+        tombstones.add(Tombstone(entity, id, now()))
+        repo.saveTombstones(tombstones.toList())
+    }
+
     fun addTransaction(t: Transaction) {
-        transactions.add(0, t)
+        val stamped = t.copy(updatedAt = now())
+        transactions.add(0, stamped)
         repo.saveTransactions(transactions.toList())
-        viewModelScope.launch { try { repo.syncTransactionsToCloud(transactions.toList()) } catch (_: Exception) {} }
+        fireSync { repo.syncTransactionsToCloud(transactions.toList()) }
     }
 
     fun deleteTransaction(transactionId: String) {
         transactions.removeAll { it.id == transactionId }
         repo.saveTransactions(transactions.toList())
-        viewModelScope.launch { try { repo.deleteTransactionFromCloud(transactionId) } catch (_: Exception) {} }
+        addTombstone("transactions", transactionId)
+        fireSync {
+            repo.deleteTransactionFromCloud(transactionId)
+            repo.syncTombstonesToCloud(tombstones.toList())
+        }
     }
 
     fun addClient(c: Client) {
-        clients.add(c)
+        val stamped = c.copy(updatedAt = now())
+        clients.add(stamped)
         repo.saveClients(clients.toList())
-        viewModelScope.launch { try { repo.syncClientsToCloud(clients.toList()) } catch (_: Exception) {} }
+        fireSync { repo.syncClientsToCloud(clients.toList()) }
     }
 
     fun updateClient(updated: Client) {
         val idx = clients.indexOfFirst { it.id == updated.id }
         if (idx >= 0) {
-            clients[idx] = updated
+            clients[idx] = updated.copy(updatedAt = now())
             repo.saveClients(clients.toList())
-            viewModelScope.launch { try { repo.syncClientsToCloud(clients.toList()) } catch (_: Exception) {} }
+            fireSync { repo.syncClientsToCloud(clients.toList()) }
         }
     }
 
     fun deleteClient(clientId: String) {
         val name = clients.firstOrNull { it.id == clientId }?.ownerName
         clients.removeAll { it.id == clientId }
+        addTombstone("clients", clientId)
+        val removedApptIds = if (name != null)
+            appointments.filter { it.clientName == name }.map { it.id } else emptyList()
         if (name != null) appointments.removeAll { it.clientName == name }
+        removedApptIds.forEach { addTombstone("appointments", it) }
         repo.saveClients(clients.toList())
         repo.saveAppointments(appointments.toList())
-        viewModelScope.launch {
-            try {
-                repo.deleteClientFromCloud(clientId)
-                if (name != null) repo.syncAppointmentsToCloud(appointments.toList())
-            } catch (_: Exception) {}
+        fireSync {
+            repo.deleteClientFromCloud(clientId)
+            removedApptIds.forEach { repo.deleteAppointmentFromCloud(it) }
+            repo.syncTombstonesToCloud(tombstones.toList())
         }
     }
 
     fun addAppointment(a: Appointment) {
-        val toAdd = expandRecurring(a)
+        val toAdd = expandRecurring(a).map { it.copy(updatedAt = now()) }
         appointments.addAll(toAdd)
         repo.saveAppointments(appointments.toList())
-        viewModelScope.launch { try { repo.syncAppointmentsToCloud(appointments.toList()) } catch (_: Exception) {} }
+        fireSync { repo.syncAppointmentsToCloud(appointments.toList()) }
     }
 
     /**
@@ -259,9 +321,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }.map { it.id }
         if (toRemove.isEmpty()) return
         appointments.removeAll { it.id in toRemove }
+        toRemove.forEach { addTombstone("appointments", it) }
         repo.saveAppointments(appointments.toList())
-        viewModelScope.launch {
-            try { toRemove.forEach { repo.deleteAppointmentFromCloud(it) } } catch (_: Exception) {}
+        fireSync {
+            toRemove.forEach { repo.deleteAppointmentFromCloud(it) }
+            repo.syncTombstonesToCloud(tombstones.toList())
         }
     }
 
@@ -291,7 +355,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val cand = template.copy(
                     id = UUID.randomUUID().toString(),
                     date = date,
-                    status = ApptStatus.SCHEDULED
+                    status = ApptStatus.SCHEDULED,
+                    updatedAt = now()
                 )
                 if (OverlapChecker.findConflict(cand, running) == null) {
                     running.add(cand); generated.add(cand)
@@ -304,22 +369,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun updateAppointment(updated: Appointment) {
         val idx = appointments.indexOfFirst { it.id == updated.id }
         if (idx >= 0) {
-            appointments[idx] = updated
+            appointments[idx] = updated.copy(updatedAt = now())
             repo.saveAppointments(appointments.toList())
-            viewModelScope.launch { try { repo.syncAppointmentsToCloud(appointments.toList()) } catch (_: Exception) {} }
+            fireSync { repo.syncAppointmentsToCloud(appointments.toList()) }
         }
     }
 
     fun deleteAppointment(appointmentId: String) {
         appointments.removeAll { it.id == appointmentId }
         repo.saveAppointments(appointments.toList())
-        viewModelScope.launch { try { repo.deleteAppointmentFromCloud(appointmentId) } catch (_: Exception) {} }
+        addTombstone("appointments", appointmentId)
+        fireSync {
+            repo.deleteAppointmentFromCloud(appointmentId)
+            repo.syncTombstonesToCloud(tombstones.toList())
+        }
     }
 
     fun updateTemplates(welcome: String, confirm: String, reschedule: String) {
         tplWelcome = welcome; tplConfirm = confirm; tplReschedule = reschedule
         repo.saveTemplates(welcome, confirm, reschedule)
-        viewModelScope.launch { try { repo.syncSettingsToCloud(welcome, confirm, reschedule) } catch (_: Exception) {} }
+        fireSync { repo.syncSettingsToCloud(welcome, confirm, reschedule) }
     }
 
     fun checkOverlap(candidate: Appointment) {

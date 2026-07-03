@@ -10,5 +10,7 @@ data class Client(
     val lastVisit: String,
     val needsReschedule: Boolean,
     val petType: PetType,
-    val phone: String = ""
+    val phone: String = "",
+    // Marca de última modificación (ISO-8601 instant) para el merge last-write-wins.
+    val updatedAt: String = ""
 )

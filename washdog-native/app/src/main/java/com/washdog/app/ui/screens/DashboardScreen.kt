@@ -17,16 +17,21 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +59,8 @@ import com.washdog.app.ui.theme.WDIncomeTnt
 import com.washdog.app.ui.theme.WDInk
 import com.washdog.app.ui.theme.WDInkMute
 import com.washdog.app.ui.theme.WDPrimary
+import com.washdog.app.ui.theme.WDWarn
+import com.washdog.app.ui.theme.WDWarnTnt
 import com.washdog.app.viewmodel.AppViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -80,6 +87,31 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item(key = "header")  { DashboardHeader(isTablet) }
+            if (vm.pendingSync) {
+                item(key = "pending_sync") {
+                    Card(
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(12.dp),
+                        colors    = CardDefaults.cardColors(containerColor = WDWarnTnt),
+                        elevation = CardDefaults.cardElevation(0.dp)
+                    ) {
+                        Row(
+                            modifier              = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Filled.CloudOff, null, tint = WDWarn, modifier = Modifier.size(18.dp))
+                            Text(
+                                "Cambios sin sincronizar",
+                                fontSize = 13.sp, color = WDInk, modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { vm.retrySync() }) {
+                                Text("Reintentar", color = WDPrimary, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
             item(key = "balance") {
                 WDBalanceCard(net = vm.netBalance, income = vm.totalIncome, expense = vm.totalExpense)
             }
