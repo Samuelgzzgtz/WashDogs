@@ -20,8 +20,8 @@ import com.washdog.app.MainActivity
 import com.washdog.app.R
 import com.washdog.app.data.AppRepository
 import com.washdog.app.data.WashdogSupabase
+import com.washdog.app.util.RemindLogic
 import io.github.jan.supabase.auth.auth
-import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
 /**
@@ -40,14 +40,11 @@ class ReminderWorker(
             try { WashdogSupabase.client.auth.awaitInitialization() } catch (_: Exception) {}
             if (WashdogSupabase.client.auth.currentUserOrNull() == null) return Result.success()
 
-            val clients = AppRepository(applicationContext).loadClients()
-            val today = LocalDate.now()
-            val toRemind = clients.filter { c ->
-                val days = try {
-                    today.toEpochDay() - LocalDate.parse(c.lastVisit).toEpochDay()
-                } catch (e: Exception) { 0L }
-                days >= 30
-            }
+            val repo = AppRepository(applicationContext)
+            val clients = repo.loadClients()
+            val appointments = repo.loadAppointments()
+            // Mismo criterio que la UI: ≥30 días sin visita y sin cita futura agendada.
+            val toRemind = RemindLogic.clientsNeedingReminder(clients, appointments)
             if (toRemind.isNotEmpty()) notify(toRemind.size, toRemind.first().petName)
             Result.success()
         } catch (e: Exception) {

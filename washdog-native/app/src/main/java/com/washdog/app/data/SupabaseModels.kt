@@ -35,6 +35,7 @@ data class AppointmentRow(
     @SerialName("end_time")          val endTime: String = "",
     val date: String,
     val status: String,
+    val notes: String = "",
     @SerialName("repeat_every_days") val repeatEveryDays: Int? = null,
     @SerialName("series_id")         val seriesId: String? = null,
     @SerialName("updated_at")        val updatedAt: String = ""
@@ -89,14 +90,14 @@ fun ClientRow.toClient() = Client(
 fun Appointment.toRow(userId: String) = AppointmentRow(
     id = id, userId = userId, clientId = clientId, clientName = clientName, petName = petName,
     service = service, time = time, endTime = endTime, date = date,
-    status = status.name, repeatEveryDays = repeatEveryDays, seriesId = seriesId,
+    status = status.name, notes = notes, repeatEveryDays = repeatEveryDays, seriesId = seriesId,
     updatedAt = updatedAt
 )
 
 fun AppointmentRow.toAppointment() = Appointment(
     id = id, clientId = clientId, clientName = clientName, petName = petName, service = service,
     time = time, endTime = endTime, date = date,
-    status = ApptStatus.valueOf(status),
+    status = ApptStatus.valueOf(status), notes = notes,
     repeatEveryDays = repeatEveryDays, seriesId = seriesId, updatedAt = updatedAt
 )
 

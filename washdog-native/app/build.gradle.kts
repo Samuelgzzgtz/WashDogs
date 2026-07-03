@@ -19,8 +19,8 @@ android {
         applicationId = "com.washdog.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.3.2"
+        versionCode = 6
+        versionName = "1.3.3"
         buildConfigField("String", "SUPABASE_URL",      "\"${localProps["SUPABASE_URL"] ?: ""}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProps["SUPABASE_ANON_KEY"] ?: ""}\"")
     }

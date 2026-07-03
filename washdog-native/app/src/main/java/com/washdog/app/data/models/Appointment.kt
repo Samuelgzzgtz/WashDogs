@@ -14,6 +14,7 @@ data class Appointment(
     val date: String,
     val status: ApptStatus,
     val endTime: String = "",
+    val notes: String = "",
     // Recurrencia (v1.3.0): si [repeatEveryDays] != null, la cita pertenece a una serie
     // que se repite cada N días; todas las ocurrencias comparten [seriesId].
     val repeatEveryDays: Int? = null,

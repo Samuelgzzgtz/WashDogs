@@ -49,6 +49,11 @@ class RecurrenceTest {
     }
 
     @Test
+    fun occurrenceId_is_deterministic() {
+        assertEquals("s1@2026-01-16", Recurrence.occurrenceId("s1", "2026-01-16"))
+    }
+
+    @Test
     fun missing_generates_future_when_none_exist() {
         val today = LocalDate.parse("2026-01-20")
         val result = Recurrence.missingOccurrences(

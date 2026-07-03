@@ -14,6 +14,7 @@ import com.washdog.app.data.models.Appointment
 import com.washdog.app.util.OverlapChecker
 import com.washdog.app.util.Recurrence
 import com.washdog.app.util.ClientLink
+import com.washdog.app.util.RemindLogic
 import com.washdog.app.util.SyncMerge
 import com.washdog.app.data.models.ApptStatus
 import com.washdog.app.data.models.Client
@@ -221,10 +222,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── MUTATIONS + CLOUD SYNC ────────────────────────────────────────────────
 
-    /** Lanza un sync a la nube; si falla, marca cambios pendientes para el indicador. */
+    /**
+     * Lanza un sync a la nube: al lograrlo limpia el indicador de pendientes; si falla lo
+     * marca. Cada mutación sube su lista completa, así que un éxito refleja que esa
+     * entidad quedó al día; el sync completo de `loadData` es la limpieza autoritativa.
+     */
     private fun fireSync(block: suspend () -> Unit) {
         viewModelScope.launch {
-            try { block() } catch (_: Exception) { pendingSync = true; repo.setUnsynced(true) }
+            try {
+                block()
+                pendingSync = false; repo.setUnsynced(false)
+            } catch (_: Exception) {
+                pendingSync = true; repo.setUnsynced(true)
+            }
         }
     }
 
@@ -307,7 +317,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val extra = Recurrence.occurrencesWithinHorizon(base.date, every)
             .mapNotNull { date ->
                 val occ = head.copy(
-                    id = UUID.randomUUID().toString(),
+                    id = Recurrence.occurrenceId(seriesId, date),
                     date = date,
                     status = ApptStatus.SCHEDULED
                 )
@@ -358,7 +368,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
             for (date in missing) {
                 val cand = template.copy(
-                    id = UUID.randomUUID().toString(),
+                    id = Recurrence.occurrenceId(template.seriesId!!, date),
                     date = date,
                     status = ApptStatus.SCHEDULED,
                     updatedAt = now()
@@ -408,7 +418,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val netBalance:   Double get() = totalIncome - totalExpense
 
     val clientsToRemind: List<Client>
-        get() = clients.filter { daysSince(it.lastVisit) >= 30 }
+        get() = RemindLogic.clientsNeedingReminder(clients, appointments)
 
     internal fun daysSince(dateStr: String): Long {
         return try {

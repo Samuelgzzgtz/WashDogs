@@ -13,6 +13,13 @@ object Recurrence {
     const val DEFAULT_HORIZON_DAYS = 90
 
     /**
+     * Id determinista de una ocurrencia generada: `<seriesId>@<fecha>`. Al ser el mismo
+     * en todos los dispositivos, el merge por id deduplica en vez de crear copias si dos
+     * dispositivos materializan la misma serie sin conexión a la vez.
+     */
+    fun occurrenceId(seriesId: String, date: String): String = "$seriesId@$date"
+
+    /**
      * Fechas de la serie que caen en `(startDate, startDate + horizonDays]`.
      *
      * NO incluye [startDate] (esa es la cita original que el usuario ya creó); devuelve
