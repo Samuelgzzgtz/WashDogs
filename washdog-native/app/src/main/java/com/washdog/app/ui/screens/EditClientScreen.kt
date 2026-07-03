@@ -101,10 +101,20 @@ fun EditClientScreen(vm: AppViewModel, clientId: String, onBack: () -> Unit) {
     ) { granted -> if (granted) contactPickerLauncher.launch(null) }
 
     if (showDeleteDialog) {
+        val apptCount = vm.appointments.count {
+            it.clientId == client.id || (it.clientId.isBlank() && it.clientName == client.ownerName)
+        }
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Eliminar cliente") },
-            text  = { Text("¿Eliminar a ${client.ownerName}? Esta acción no se puede deshacer.") },
+            text  = {
+                Text(
+                    if (apptCount > 0)
+                        "¿Eliminar a ${client.ownerName}? También se eliminarán sus $apptCount cita(s). Esta acción no se puede deshacer."
+                    else
+                        "¿Eliminar a ${client.ownerName}? Esta acción no se puede deshacer."
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     vm.deleteClient(clientId)

@@ -16,14 +16,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +61,23 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
     var welcome    by remember { mutableStateOf(vm.tplWelcome) }
     var confirm    by remember { mutableStateOf(vm.tplConfirm) }
     var reschedule by remember { mutableStateOf(vm.tplReschedule) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title   = { Text("Cerrar sesión") },
+            text    = { Text("¿Seguro que quieres cerrar sesión? Tus datos guardados en este dispositivo se conservan.") },
+            confirmButton = {
+                TextButton(onClick = { showLogoutDialog = false; vm.logout() }) {
+                    Text("Cerrar sesión", color = Color(0xFF9F6E7E))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) { Text("Cancelar") }
+            }
+        )
+    }
 
     Box(Modifier.fillMaxSize().background(WDBg)) {
         Column(
@@ -129,6 +149,31 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     fontSize   = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
+            }
+
+            // ── Cuenta ──────────────────────────────────────────────────────────
+            Text(
+                "Cuenta",
+                fontSize   = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color      = WDInkMute
+            )
+
+            OutlinedButton(
+                onClick  = { vm.forgetCredentials() },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape    = RoundedCornerShape(14.dp)
+            ) {
+                Text("Olvidar datos guardados", color = WDInk)
+            }
+
+            Button(
+                onClick  = { showLogoutDialog = true },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape    = RoundedCornerShape(14.dp),
+                colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF9F6E7E))
+            ) {
+                Text("Cerrar sesión", color = Color.White, fontWeight = FontWeight.SemiBold)
             }
 
             Spacer(Modifier.height(80.dp))

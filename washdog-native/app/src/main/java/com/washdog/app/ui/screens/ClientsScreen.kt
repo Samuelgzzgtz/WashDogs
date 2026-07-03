@@ -94,7 +94,9 @@ fun ClientsScreen(vm: AppViewModel, onNavigateSettings: () -> Unit, onAddClient:
 
     fun sendConfirm(client: Client) {
         if (client.phone.isBlank()) return
-        val appt = vm.appointments.firstOrNull { it.clientName == client.ownerName }
+        val appt = vm.appointments.firstOrNull {
+            it.clientId == client.id || (it.clientId.isBlank() && it.clientName == client.ownerName)
+        }
         val msg  = WhatsAppHelper.interpolate(
             vm.tplConfirm, client.ownerName,
             appt?.date ?: "", appt?.time ?: ""

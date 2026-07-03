@@ -22,3 +22,6 @@ secrets.properties
 *service-role*
 *anon_key*
 *anon-key*
+
+# IDE
+.idea/

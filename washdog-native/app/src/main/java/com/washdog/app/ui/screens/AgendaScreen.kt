@@ -173,9 +173,10 @@ fun AgendaScreen(vm: AppViewModel, onAddAppointment: (date: String) -> Unit) {
             } else {
                 items(filtered, key = { it.id }) { appt ->
                     AppointmentRow(
-                        appt     = appt,
-                        ph       = ph,
-                        onDelete = { vm.deleteAppointment(appt.id) }
+                        appt        = appt,
+                        ph          = ph,
+                        onDelete    = { vm.deleteAppointment(appt.id) },
+                        onStopSeries = { appt.seriesId?.let { vm.stopSeries(it) } }
                     )
                 }
             }
@@ -246,21 +247,40 @@ private fun AgendaReminderCard(
 }
 
 @Composable
-private fun AppointmentRow(appt: Appointment, ph: Dp, onDelete: () -> Unit) {
+private fun AppointmentRow(
+    appt: Appointment,
+    ph: Dp,
+    onDelete: () -> Unit,
+    onStopSeries: () -> Unit = {}
+) {
     var showDialog by remember { mutableStateOf(false) }
+    val isRecurring = appt.seriesId != null
 
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title            = { Text("Eliminar cita") },
-            text             = { Text("¿Eliminar la cita de ${appt.clientName} — ${appt.petName}?") },
+            title            = { Text(if (isRecurring) "Cita recurrente" else "Eliminar cita") },
+            text             = {
+                Text(
+                    if (isRecurring)
+                        "Esta cita se repite cada ${appt.repeatEveryDays ?: "?"} días. Puedes eliminar solo esta o detener las futuras."
+                    else
+                        "¿Eliminar la cita de ${appt.clientName} — ${appt.petName}?"
+                )
+            },
             confirmButton    = {
                 TextButton(onClick = { onDelete(); showDialog = false }) {
-                    Text("Eliminar", color = androidx.compose.ui.graphics.Color(0xFF9F6E7E))
+                    Text("Eliminar esta", color = androidx.compose.ui.graphics.Color(0xFF9F6E7E))
                 }
             },
             dismissButton    = {
-                TextButton(onClick = { showDialog = false }) { Text("Cancelar") }
+                if (isRecurring) {
+                    TextButton(onClick = { onStopSeries(); showDialog = false }) {
+                        Text("Detener recurrencia", color = androidx.compose.ui.graphics.Color(0xFF9F6E7E))
+                    }
+                } else {
+                    TextButton(onClick = { showDialog = false }) { Text("Cancelar") }
+                }
             }
         )
     }
@@ -290,9 +310,9 @@ private fun AppointmentRow(appt: Appointment, ph: Dp, onDelete: () -> Unit) {
                     .weight(1f)
                     .padding(start = 12.dp, top = 12.dp, bottom = 12.dp)
             ) {
+                val timeLabel = if (appt.endTime.isNotEmpty()) "${appt.time}–${appt.endTime}" else appt.time
                 Text(
-                    text       = if (appt.endTime.isNotEmpty()) "${appt.time}–${appt.endTime} · ${appt.clientName}"
-                                 else "${appt.time} · ${appt.clientName}",
+                    text       = if (isRecurring) "$timeLabel · ${appt.clientName}  🔁" else "$timeLabel · ${appt.clientName}",
                     fontSize   = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color      = WDInk

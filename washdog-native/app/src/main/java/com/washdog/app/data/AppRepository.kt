@@ -9,6 +9,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.data.models.Client
+import com.washdog.app.data.models.Tombstone
 import com.washdog.app.data.models.Transaction
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
@@ -34,6 +35,8 @@ class AppRepository(private val context: Context) {
     private fun keyC(u: String?)    = stringPreferencesKey(LocalKeys.scoped("tpl_confirm", u))
     private fun keyR(u: String?)    = stringPreferencesKey(LocalKeys.scoped("tpl_reschedule", u))
     private fun keyInit(u: String?) = booleanPreferencesKey(LocalKeys.scoped("initialized", u))
+    private fun keyTomb(u: String?) = stringPreferencesKey(LocalKeys.scoped("tombstones", u))
+    private fun keyUnsynced(u: String?) = booleanPreferencesKey(LocalKeys.scoped("unsynced", u))
 
     // Claves legacy (sin namespace, pre v1.1.x) — solo para la migración única.
     private val KEY_LEGACY_MIGRATED = booleanPreferencesKey("legacy_migrated")
@@ -162,6 +165,31 @@ class AppRepository(private val context: Context) {
         } catch (e: Exception) { Triple(DEFAULT_WELCOME, DEFAULT_CONFIRM, DEFAULT_RESCHEDULE) }
     }
 
+    // ── TOMBSTONES + FLAG DE SYNC (local) ───────────────────────────────────────
+
+    fun saveTombstones(list: List<Tombstone>) {
+        val u = userId()
+        saveScope.launch { context.dataStore.edit { it[keyTomb(u)] = gson.toJson(list) } }
+    }
+
+    suspend fun loadTombstones(): List<Tombstone> {
+        return try {
+            val json = context.dataStore.data.first()[keyTomb(userId())] ?: return emptyList()
+            gson.fromJson(json, object : TypeToken<List<Tombstone>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /** Marca si hay cambios locales pendientes de subir (para el indicador de sync). */
+    fun setUnsynced(pending: Boolean) {
+        val u = userId()
+        saveScope.launch { context.dataStore.edit { it[keyUnsynced(u)] = pending } }
+    }
+
+    suspend fun isUnsynced(): Boolean {
+        return try { context.dataStore.data.first()[keyUnsynced(userId())] == true }
+        catch (e: Exception) { false }
+    }
+
     // ── CLOUD SYNC ────────────────────────────────────────────────────────────
 
     private fun userId(): String? =
@@ -209,6 +237,16 @@ class AppRepository(private val context: Context) {
         WashdogSupabase.client.from("transactions").delete { filter { eq("id", id) } }
     }
 
+    /** Sube (upsert) los tombstones locales a la nube para que otros dispositivos borren. */
+    suspend fun syncTombstonesToCloud(tombstones: List<Tombstone>) {
+        val uid = userId() ?: return
+        if (tombstones.isEmpty()) return
+        WashdogSupabase.client.from("tombstones")
+            .upsert(tombstones.map { TombstoneRow(uid, it.entity, it.entityId, it.deletedAt) }) {
+                onConflict = "user_id,entity,entity_id"
+            }
+    }
+
     suspend fun loadFromCloud(): CloudSnapshot? {
         return try {
             val clients = WashdogSupabase.client.from("clients")
@@ -219,7 +257,10 @@ class AppRepository(private val context: Context) {
                 .select().decodeList<TransactionRow>().map { it.toTransaction() }
             val settings = WashdogSupabase.client.from("user_settings")
                 .select().decodeList<UserSettingsRow>().firstOrNull()
-            CloudSnapshot(clients, appointments, transactions, settings)
+            val tombstones = WashdogSupabase.client.from("tombstones")
+                .select().decodeList<TombstoneRow>()
+                .map { Tombstone(it.entity, it.entityId, it.deletedAt) }
+            CloudSnapshot(clients, appointments, transactions, settings, tombstones)
         } catch (e: Exception) { null }
     }
 }
@@ -228,5 +269,6 @@ data class CloudSnapshot(
     val clients:      List<Client>,
     val appointments: List<Appointment>,
     val transactions: List<Transaction>,
-    val settings:     UserSettingsRow?
+    val settings:     UserSettingsRow?,
+    val tombstones:   List<Tombstone> = emptyList()
 )
