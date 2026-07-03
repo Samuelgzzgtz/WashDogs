@@ -9,20 +9,24 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.washdog.app.data.AppRepository
 import com.washdog.app.data.AuthRepository
+import com.washdog.app.data.CredentialStore
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.util.OverlapChecker
+import com.washdog.app.util.Recurrence
 import com.washdog.app.data.models.ApptStatus
 import com.washdog.app.data.models.Client
 import com.washdog.app.data.models.PetType
 import com.washdog.app.data.models.Transaction
 import com.washdog.app.data.models.TxType
 import java.time.LocalDate
+import java.util.UUID
 import kotlinx.coroutines.launch
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo     = AppRepository(application)
     private val authRepo = AuthRepository()
+    private val credentialStore = CredentialStore(application)
 
     val transactions  = mutableStateListOf<Transaction>()
     val clients       = mutableStateListOf<Client>()
@@ -52,11 +56,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── AUTH ──────────────────────────────────────────────────────────────────
 
-    fun login(email: String, password: String, onError: (String) -> Unit) {
+    fun login(email: String, password: String, remember: Boolean = false, onError: (String) -> Unit) {
         isLoggingIn = true
         viewModelScope.launch {
             try {
                 authRepo.login(email, password)
+                if (remember) credentialStore.save(email, password) else credentialStore.clear()
                 loadData()
                 isLoggedIn = true
             } catch (e: Exception) {
@@ -67,15 +72,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun logout() {
+    /**
+     * Cierra la sesión. Por defecto conserva las credenciales recordadas (para volver a
+     * entrar con huella sin reescribir); [clearCredentials] las borra explícitamente.
+     */
+    fun logout(clearCredentials: Boolean = false) {
         viewModelScope.launch {
             try { authRepo.logout() } catch (_: Exception) {}
+            if (clearCredentials) credentialStore.clear()
             transactions.clear()
             clients.clear()
             appointments.clear()
             isLoggedIn = false
         }
     }
+
+    // ── RECORDAR CREDENCIALES ───────────────────────────────────────────────────
+
+    fun hasRememberedCredentials(): Boolean = credentialStore.hasCredentials()
+
+    /** (email, password) guardados, o null. Usar solo tras desbloqueo biométrico. */
+    fun rememberedCredentials(): Pair<String, String>? = credentialStore.load()
+
+    fun forgetCredentials() = credentialStore.clear()
 
     // ── LOAD DATA ─────────────────────────────────────────────────────────────
 
@@ -100,7 +119,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         //    gana lo LOCAL, para no pisar ediciones recién hechas que aún no subieron.
         //    Garantiza cero pérdida de datos del usuario (rule #3).
         val finalCl   = mergeById(localCl,   cloud?.clients      ?: emptyList()) { it.id }
-        val finalAppt = mergeById(localAppt, cloud?.appointments ?: emptyList()) { it.id }
+        val mergedAppt = mergeById(localAppt, cloud?.appointments ?: emptyList()) { it.id }
+        // Rellena ocurrencias futuras de series recurrentes para que sigan en el calendario.
+        val finalAppt = topUpRecurringSeries(mergedAppt)
         val finalTx   = mergeById(localTx,   cloud?.transactions ?: emptyList()) { it.id }
 
         // Plantillas: la nube gana si existe, si no, lo local.
@@ -200,9 +221,84 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addAppointment(a: Appointment) {
-        appointments.add(a)
+        val toAdd = expandRecurring(a)
+        appointments.addAll(toAdd)
         repo.saveAppointments(appointments.toList())
         viewModelScope.launch { try { repo.syncAppointmentsToCloud(appointments.toList()) } catch (_: Exception) {} }
+    }
+
+    /**
+     * Si [base] es recurrente ([repeatEveryDays] != null), devuelve la cita base más las
+     * ocurrencias futuras dentro del horizonte (mismo [seriesId]), omitiendo las que
+     * solapen con citas ya existentes. Si no es recurrente, devuelve solo [base].
+     */
+    private fun expandRecurring(base: Appointment): List<Appointment> {
+        val every = base.repeatEveryDays ?: return listOf(base)
+        val seriesId = base.seriesId ?: UUID.randomUUID().toString()
+        val head = base.copy(seriesId = seriesId)
+        val existing = appointments.toMutableList().apply { add(head) }
+        val extra = Recurrence.occurrencesWithinHorizon(base.date, every)
+            .mapNotNull { date ->
+                val occ = head.copy(
+                    id = UUID.randomUUID().toString(),
+                    date = date,
+                    status = ApptStatus.SCHEDULED
+                )
+                if (OverlapChecker.findConflict(occ, existing) == null) {
+                    existing.add(occ); occ
+                } else null
+            }
+        return listOf(head) + extra
+    }
+
+    /** Detiene una serie recurrente: borra sus ocurrencias FUTURAS (fecha >= hoy). */
+    fun stopSeries(seriesId: String) {
+        val today = LocalDate.now().toString()
+        val toRemove = appointments.filter {
+            it.seriesId == seriesId && it.date >= today
+        }.map { it.id }
+        if (toRemove.isEmpty()) return
+        appointments.removeAll { it.id in toRemove }
+        repo.saveAppointments(appointments.toList())
+        viewModelScope.launch {
+            try { toRemove.forEach { repo.deleteAppointmentFromCloud(it) } } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Rellena las ocurrencias faltantes de cada serie recurrente hasta el horizonte, para
+     * que las citas periódicas sigan apareciendo en el calendario en cada arranque.
+     * Devuelve la lista completa (existente + nuevas) sin duplicar fechas por serie.
+     */
+    private fun topUpRecurringSeries(current: List<Appointment>): List<Appointment> {
+        val bySeries = current.filter { it.seriesId != null && it.repeatEveryDays != null }
+            .groupBy { it.seriesId!! }
+        if (bySeries.isEmpty()) return current
+        val today = LocalDate.now()
+        val generated = mutableListOf<Appointment>()
+        val running = current.toMutableList()
+        for ((_, occ) in bySeries) {
+            val template = occ.minByOrNull { it.date } ?: continue
+            val every = template.repeatEveryDays ?: continue
+            val existingDates = occ.map { it.date }.toSet()
+            val missing = Recurrence.missingOccurrences(
+                startDate = template.date,
+                everyDays = every,
+                existingDates = existingDates,
+                today = today
+            )
+            for (date in missing) {
+                val cand = template.copy(
+                    id = UUID.randomUUID().toString(),
+                    date = date,
+                    status = ApptStatus.SCHEDULED
+                )
+                if (OverlapChecker.findConflict(cand, running) == null) {
+                    running.add(cand); generated.add(cand)
+                }
+            }
+        }
+        return if (generated.isEmpty()) current else current + generated
     }
 
     fun updateAppointment(updated: Appointment) {

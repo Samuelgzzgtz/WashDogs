@@ -18,10 +18,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -69,6 +72,8 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
     var endTime         by remember { mutableStateOf("") }
     var showEndPicker   by remember { mutableStateOf(false) }
     var endTimeEnabled  by remember { mutableStateOf(false) }
+    var repeatEveryDays by remember { mutableStateOf<Int?>(null) }
+    var customRepeat    by remember { mutableStateOf("") }
 
     val clientNames    = vm.clients.map { "${it.petName} · ${it.ownerName}" }
     val serviceNames   = WD_SERVICES.map { it.name }
@@ -257,6 +262,50 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                 }
             }
 
+            // Reagendado recurrente: repetir la cita cada N días
+            item(key = "repeat_section") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Repetir cada", fontSize = 13.sp, color = WDInkMute)
+                    val presets = listOf<Int?>(null, 7, 14, 15, 30)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        presets.forEach { preset ->
+                            FilterChip(
+                                selected = repeatEveryDays == preset && customRepeat.isBlank(),
+                                onClick  = { repeatEveryDays = preset; customRepeat = "" },
+                                label    = { Text(if (preset == null) "No repetir" else "$preset días") }
+                            )
+                        }
+                        FilterChip(
+                            selected = customRepeat.isNotBlank(),
+                            onClick  = { if (customRepeat.isBlank()) customRepeat = "" },
+                            label    = { Text("Otro") }
+                        )
+                    }
+                    if (repeatEveryDays == null || customRepeat.isNotBlank()) {
+                        OutlinedTextField(
+                            value         = customRepeat,
+                            onValueChange = {
+                                customRepeat    = it.filter { c -> c.isDigit() }
+                                repeatEveryDays = customRepeat.toIntOrNull()
+                            },
+                            label       = { Text("Cada cuántos días (personalizado)") },
+                            singleLine  = true,
+                            modifier    = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (repeatEveryDays != null && repeatEveryDays!! > 0) {
+                        Text(
+                            "Se crearán citas cada ${repeatEveryDays} días durante los próximos 90 días.",
+                            fontSize = 11.sp,
+                            color    = WDInkMute
+                        )
+                    }
+                }
+            }
+
             if (conflict != null) {
                 item(key = "overlap_error") {
                     androidx.compose.material3.Card(
@@ -296,7 +345,8 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                                     time       = time,
                                     date       = date,
                                     status     = ApptStatus.SCHEDULED,
-                                    endTime    = if (endTimeEnabled) endTime else ""
+                                    endTime    = if (endTimeEnabled) endTime else "",
+                                    repeatEveryDays = repeatEveryDays?.takeIf { it > 0 }
                                 )
                             )
                             onBack()

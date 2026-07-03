@@ -25,14 +25,16 @@ data class ClientRow(
 @Serializable
 data class AppointmentRow(
     val id: String,
-    @SerialName("user_id")     val userId: String,
-    @SerialName("client_name") val clientName: String,
-    @SerialName("pet_name")    val petName: String,
+    @SerialName("user_id")           val userId: String,
+    @SerialName("client_name")       val clientName: String,
+    @SerialName("pet_name")          val petName: String,
     val service: String,
     val time: String,
-    @SerialName("end_time")    val endTime: String = "",
+    @SerialName("end_time")          val endTime: String = "",
     val date: String,
-    val status: String
+    val status: String,
+    @SerialName("repeat_every_days") val repeatEveryDays: Int? = null,
+    @SerialName("series_id")         val seriesId: String? = null
 )
 
 @Serializable
@@ -71,13 +73,14 @@ fun ClientRow.toClient() = Client(
 fun Appointment.toRow(userId: String) = AppointmentRow(
     id = id, userId = userId, clientName = clientName, petName = petName,
     service = service, time = time, endTime = endTime, date = date,
-    status = status.name
+    status = status.name, repeatEveryDays = repeatEveryDays, seriesId = seriesId
 )
 
 fun AppointmentRow.toAppointment() = Appointment(
     id = id, clientName = clientName, petName = petName, service = service,
     time = time, endTime = endTime, date = date,
-    status = ApptStatus.valueOf(status)
+    status = ApptStatus.valueOf(status),
+    repeatEveryDays = repeatEveryDays, seriesId = seriesId
 )
 
 fun Transaction.toRow(userId: String) = TransactionRow(
