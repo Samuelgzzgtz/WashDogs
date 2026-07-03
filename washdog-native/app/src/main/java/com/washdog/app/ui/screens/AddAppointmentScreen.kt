@@ -339,6 +339,7 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                             vm.addAppointment(
                                 Appointment(
                                     id         = java.util.UUID.randomUUID().toString(),
+                                    clientId   = client.id,
                                     clientName = client.ownerName,
                                     petName    = client.petName,
                                     service    = service,

@@ -13,6 +13,7 @@ import com.washdog.app.data.CredentialStore
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.util.OverlapChecker
 import com.washdog.app.util.Recurrence
+import com.washdog.app.util.ClientLink
 import com.washdog.app.util.SyncMerge
 import com.washdog.app.data.models.ApptStatus
 import com.washdog.app.data.models.Client
@@ -146,7 +147,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             SyncMerge.mergeByUpdatedAt(localAppt, cloud?.appointments ?: emptyList(), { it.id }, { it.updatedAt }),
             tombstoneMap("appointments"), { it.id }, { it.updatedAt }
         )
-        val finalAppt = topUpRecurringSeries(mergedAppt)
+        // Migración v1.3.0: rellenar clientId faltante de citas legacy por nombre.
+        val toppedAppt = topUpRecurringSeries(mergedAppt)
+        val finalAppt = ClientLink.backfill(toppedAppt, finalCl)
         val finalTx = SyncMerge.applyTombstones(
             SyncMerge.mergeByUpdatedAt(localTx, cloud?.transactions ?: emptyList(), { it.id }, { it.updatedAt }),
             tombstoneMap("transactions"), { it.id }, { it.updatedAt }
@@ -269,9 +272,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val name = clients.firstOrNull { it.id == clientId }?.ownerName
         clients.removeAll { it.id == clientId }
         addTombstone("clients", clientId)
-        val removedApptIds = if (name != null)
-            appointments.filter { it.clientName == name }.map { it.id } else emptyList()
-        if (name != null) appointments.removeAll { it.clientName == name }
+        // Cascada por clientId (v1.3.0); para citas legacy sin clientId, cae al nombre.
+        fun belongs(a: Appointment) =
+            a.clientId == clientId || (a.clientId.isBlank() && name != null && a.clientName == name)
+        val removedApptIds = appointments.filter { belongs(it) }.map { it.id }
+        appointments.removeAll { belongs(it) }
         removedApptIds.forEach { addTombstone("appointments", it) }
         repo.saveClients(clients.toList())
         repo.saveAppointments(appointments.toList())
@@ -436,10 +441,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadSeedAppointments() {
         appointments.addAll(listOf(
-            Appointment(id = "1", clientName = "Carla Mendoza",  petName = "Luna",     service = "Baño+Corte", time = "10:20", date = LocalDate.now().minusDays(1).toString(), status = ApptStatus.DONE),
-            Appointment(id = "2", clientName = "Luis Hernández", petName = "Firulais", service = "Corte uñas", time = "09:00", date = LocalDate.now().minusDays(1).toString(), status = ApptStatus.DONE),
-            Appointment(id = "3", clientName = "Camila Rivas",   petName = "Mochi",    service = "Baño+Corte", time = "14:00", date = LocalDate.now().plusDays(2).toString(),  status = ApptStatus.NEXT),
-            Appointment(id = "4", clientName = "Ana Valdés",     petName = "Niebla",   service = "Baño gato",  time = "16:00", date = LocalDate.now().plusDays(3).toString(),  status = ApptStatus.SCHEDULED),
+            Appointment(id = "1", clientId = "2", clientName = "Carla Mendoza",  petName = "Luna",     service = "Baño+Corte", time = "10:20", date = LocalDate.now().minusDays(1).toString(), status = ApptStatus.DONE),
+            Appointment(id = "2", clientId = "4", clientName = "Luis Hernández", petName = "Firulais", service = "Corte uñas", time = "09:00", date = LocalDate.now().minusDays(1).toString(), status = ApptStatus.DONE),
+            Appointment(id = "3", clientId = "1", clientName = "Camila Rivas",   petName = "Mochi",    service = "Baño+Corte", time = "14:00", date = LocalDate.now().plusDays(2).toString(),  status = ApptStatus.NEXT),
+            Appointment(id = "4", clientId = "3", clientName = "Ana Valdés",     petName = "Niebla",   service = "Baño gato",  time = "16:00", date = LocalDate.now().plusDays(3).toString(),  status = ApptStatus.SCHEDULED),
         ))
         repo.saveAppointments(appointments.toList())
     }

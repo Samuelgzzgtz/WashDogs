@@ -4,6 +4,9 @@ enum class ApptStatus { DONE, NEXT, REMINDER, SCHEDULED }
 
 data class Appointment(
     val id: String,
+    // Vínculo estable al cliente (v1.3.0). clientName se conserva como cache para mostrar
+    // sin join y para citas legacy; el borrado en cascada usa clientId cuando existe.
+    val clientId: String = "",
     val clientName: String,
     val petName: String,
     val service: String,

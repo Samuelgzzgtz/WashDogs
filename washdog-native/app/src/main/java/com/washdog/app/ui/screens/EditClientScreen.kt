@@ -101,7 +101,9 @@ fun EditClientScreen(vm: AppViewModel, clientId: String, onBack: () -> Unit) {
     ) { granted -> if (granted) contactPickerLauncher.launch(null) }
 
     if (showDeleteDialog) {
-        val apptCount = vm.appointments.count { it.clientName == client.ownerName }
+        val apptCount = vm.appointments.count {
+            it.clientId == client.id || (it.clientId.isBlank() && it.clientName == client.ownerName)
+        }
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Eliminar cliente") },

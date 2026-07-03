@@ -32,8 +32,11 @@ class SupabaseModelsTest {
 
     @Test
     fun `Appointment toRow then toAppointment roundtrip`() {
-        val appt = Appointment("2", "Ana López", "Mochi", "Baño+Corte",
-            "10:00", "2026-05-25", ApptStatus.SCHEDULED, "11:00")
+        val appt = Appointment(
+            id = "2", clientId = "c1", clientName = "Ana López", petName = "Mochi",
+            service = "Baño+Corte", time = "10:00", date = "2026-05-25",
+            status = ApptStatus.SCHEDULED, endTime = "11:00"
+        )
         val row = appt.toRow("user-abc")
         assertEquals("SCHEDULED", row.status)
         assertEquals("11:00", row.endTime)
