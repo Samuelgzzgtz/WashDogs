@@ -13,7 +13,10 @@ import com.washdog.app.data.models.Client
 import com.washdog.app.data.models.PetType
 import com.washdog.app.data.models.Transaction
 import com.washdog.app.data.models.TxType
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SupabaseModelsTest {
@@ -51,5 +54,15 @@ class SupabaseModelsTest {
         assertEquals("IN", row.type)
         val restored = row.toTransaction()
         assertEquals(tx, restored)
+    }
+
+    // Regresión v1.3.2: la columna de la fecha en Supabase es `date`, no `date_time`.
+    // Un desajuste en el @SerialName rompía el sync de transacciones en silencio.
+    @Test
+    fun `TransactionRow serializes date field with column name date`() {
+        val row = Transaction("3", TxType.IN, 450.0, "c", "d", "2026-05-25T10:20").toRow("u")
+        val json = Json.encodeToString(row)
+        assertTrue("Debe usar la clave 'date'", json.contains("\"date\":"))
+        assertTrue("No debe usar 'date_time'", !json.contains("date_time"))
     }
 }

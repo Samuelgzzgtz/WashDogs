@@ -249,17 +249,28 @@ class AppRepository(private val context: Context) {
 
     suspend fun loadFromCloud(): CloudSnapshot? {
         return try {
+            // La primera consulta actúa de sonda de red: si falla (sin conexión),
+            // devolvemos null (no hay nube). Las siguientes se aíslan para que el fallo
+            // al decodificar UNA entidad no anule toda la carga de la nube.
             val clients = WashdogSupabase.client.from("clients")
                 .select().decodeList<ClientRow>().map { it.toClient() }
-            val appointments = WashdogSupabase.client.from("appointments")
-                .select().decodeList<AppointmentRow>().map { it.toAppointment() }
-            val transactions = WashdogSupabase.client.from("transactions")
-                .select().decodeList<TransactionRow>().map { it.toTransaction() }
-            val settings = WashdogSupabase.client.from("user_settings")
-                .select().decodeList<UserSettingsRow>().firstOrNull()
-            val tombstones = WashdogSupabase.client.from("tombstones")
-                .select().decodeList<TombstoneRow>()
-                .map { Tombstone(it.entity, it.entityId, it.deletedAt) }
+            val appointments = try {
+                WashdogSupabase.client.from("appointments")
+                    .select().decodeList<AppointmentRow>().map { it.toAppointment() }
+            } catch (_: Exception) { emptyList() }
+            val transactions = try {
+                WashdogSupabase.client.from("transactions")
+                    .select().decodeList<TransactionRow>().map { it.toTransaction() }
+            } catch (_: Exception) { emptyList() }
+            val settings = try {
+                WashdogSupabase.client.from("user_settings")
+                    .select().decodeList<UserSettingsRow>().firstOrNull()
+            } catch (_: Exception) { null }
+            val tombstones = try {
+                WashdogSupabase.client.from("tombstones")
+                    .select().decodeList<TombstoneRow>()
+                    .map { Tombstone(it.entity, it.entityId, it.deletedAt) }
+            } catch (_: Exception) { emptyList() }
             CloudSnapshot(clients, appointments, transactions, settings, tombstones)
         } catch (e: Exception) { null }
     }
