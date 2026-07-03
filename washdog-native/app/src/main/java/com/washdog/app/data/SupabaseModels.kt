@@ -48,7 +48,9 @@ data class TransactionRow(
     val amount: Double,
     val concept: String,
     val detail: String,
-    @SerialName("date_time") val dateTime: String,
+    // La columna en Supabase es `date` (no `date_time`); el desajuste rompía el sync
+    // de transacciones en silencio. El modelo local sigue llamándose dateTime.
+    @SerialName("date") val dateTime: String,
     @SerialName("updated_at") val updatedAt: String = ""
 )
 
