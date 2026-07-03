@@ -25,3 +25,7 @@ secrets.properties
 
 # IDE
 .idea/
+
+# Signing
+release.keystore
+*.keystore

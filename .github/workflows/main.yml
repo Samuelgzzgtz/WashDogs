@@ -35,14 +35,22 @@ jobs:
           echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> local.properties
           echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> local.properties
 
+      - name: Decode release keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$GITHUB_WORKSPACE/release.keystore"
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
       - name: Run unit tests
         run: ./gradlew test
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Build signed release APK
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/release.keystore
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
 
       - name: Publish APK to GitHub Releases
         if: github.event_name == 'push'
@@ -50,6 +58,6 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           name: "Build #${{ github.run_number }}"
-          files: washdog-native/app/build/outputs/apk/debug/*.apk
+          files: washdog-native/app/build/outputs/apk/release/*.apk
           draft: false
           prerelease: false
