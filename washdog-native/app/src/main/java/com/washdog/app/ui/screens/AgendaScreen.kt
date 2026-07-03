@@ -1,7 +1,5 @@
 package com.washdog.app.ui.screens
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +63,7 @@ import com.washdog.app.ui.theme.WDInkMute
 import com.washdog.app.ui.theme.WDPrimary
 import com.washdog.app.ui.theme.WDWarn
 import com.washdog.app.ui.theme.WDWarnTnt
+import com.washdog.app.util.PhoneHelper
 import com.washdog.app.util.WhatsAppHelper
 import com.washdog.app.viewmodel.AppViewModel
 import java.time.LocalDate
@@ -221,9 +220,7 @@ private fun AgendaReminderCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             OutlinedButton(
-                onClick  = {
-                    context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${client.phone}")))
-                },
+                onClick  = { PhoneHelper.dial(context, client.phone) },
                 modifier = Modifier.weight(1f),
                 shape    = RoundedCornerShape(50)
             ) { Text("Llamar", fontSize = 11.sp) }
