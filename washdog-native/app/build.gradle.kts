@@ -66,6 +66,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     // Supabase (mismas versiones que DocenCheck)
     val supabaseBom = platform("io.github.jan-tennert.supabase:bom:3.1.1")
