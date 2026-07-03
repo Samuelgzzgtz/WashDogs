@@ -19,8 +19,8 @@ android {
         applicationId = "com.washdog.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.3.3"
+        versionCode = 7
+        versionName = "1.3.4"
         buildConfigField("String", "SUPABASE_URL",      "\"${localProps["SUPABASE_URL"] ?: ""}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProps["SUPABASE_ANON_KEY"] ?: ""}\"")
     }
@@ -28,13 +28,34 @@ android {
         compose = true
         buildConfig = true
     }
+    // Firma de release con una llave ESTABLE (keystore propio), para que todas las
+    // versiones queden firmadas igual y se puedan actualizar sin desinstalar. El keystore
+    // y las contraseñas llegan por variables de entorno (el CI las inyecta desde GitHub
+    // Secrets); nunca van en el repo. Si no están presentes (build local sin secretos),
+    // el release queda sin firmar y se usa debug para probar.
+    val keystoreFileEnv = System.getenv("KEYSTORE_FILE")
+    signingConfigs {
+        create("release") {
+            if (keystoreFileEnv != null) {
+                storeFile = file(keystoreFileEnv)
+                storePassword = System.getenv("STORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
-            isMinifyEnabled = true
+            // minify desactivado hasta validar proguard en dispositivo (evita crashes de
+            // serialización/reflection sin verificar). Se puede reactivar tras probar.
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (keystoreFileEnv != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {
@@ -66,6 +87,9 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.biometric:biometric:1.1.0")
+    // fragment >= 1.3.0 es requisito para registerForActivityResult en FragmentActivity
+    // (biometric arrastra una versión más vieja). Necesario para el flujo de permisos.
+    implementation("androidx.fragment:fragment-ktx:1.6.2")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     // Supabase (mismas versiones que DocenCheck)

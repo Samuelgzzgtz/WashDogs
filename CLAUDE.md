@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**WashDogs** — App Android de gestión para peluquerías caninas: clientes, citas, ingresos/gastos y mensajes de WhatsApp con plantillas. Kotlin + Jetpack Compose, arquitectura single-activity. Versión actual `1.3.3` (versionCode 6).
+**WashDogs** — App Android de gestión para peluquerías caninas: clientes, citas, ingresos/gastos y mensajes de WhatsApp con plantillas. Kotlin + Jetpack Compose, arquitectura single-activity. Versión actual `1.3.4` (versionCode 7).
 
 El módulo de código está en `washdog-native/` (paquete `com.washdog.app`). La raíz del repo solo contiene documentación (`SECURITY.md`, `docs/`).
 
@@ -18,6 +18,13 @@ SUPABASE_ANON_KEY=<anon-key>
 ```
 
 Se inyectan como `BuildConfig.SUPABASE_URL` / `BuildConfig.SUPABASE_ANON_KEY` (ver `app/build.gradle.kts`). En CI llegan vía GitHub Secrets. Sin ellas la app compila pero no autentica.
+
+**Firma de release:** el build `release` se firma con una llave estable cuyo keystore y
+contraseñas llegan por variables de entorno (`KEYSTORE_FILE`, `STORE_PASSWORD`,
+`KEY_ALIAS`, `KEY_PASSWORD`); el CI las inyecta desde GitHub Secrets (`KEYSTORE_BASE64`
+se decodifica a un archivo). Sin esas variables (build local), el release queda sin
+firmar. Esto permite actualizar el APK sin desinstalar. `isMinifyEnabled` está en `false`
+hasta validar proguard en dispositivo.
 
 **Activar el pre-commit hook en cada clon** (bloquea fugas de URLs `*.supabase.co`, JWTs `eyJ...` y project IDs):
 
