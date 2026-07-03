@@ -308,17 +308,37 @@ private fun AppointmentRow(
                     .padding(start = 12.dp, top = 12.dp, bottom = 12.dp)
             ) {
                 val timeLabel = if (appt.endTime.isNotEmpty()) "${appt.time}–${appt.endTime}" else appt.time
-                Text(
-                    text       = if (isRecurring) "$timeLabel · ${appt.clientName}  🔁" else "$timeLabel · ${appt.clientName}",
-                    fontSize   = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color      = WDInk
-                )
+                val isPast = appt.date < LocalDate.now().toString() && appt.status != ApptStatus.DONE
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text       = if (isRecurring) "$timeLabel · ${appt.clientName}  🔁" else "$timeLabel · ${appt.clientName}",
+                        fontSize   = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color      = if (isPast) WDInkMute else WDInk
+                    )
+                    if (isPast) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(shape = RoundedCornerShape(50), color = WDWarnTnt) {
+                            Text(
+                                "pasada",
+                                fontSize = 9.sp, color = WDWarn,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
                 Text(
                     text  = "${appt.petName} · ${appt.service}",
                     fontSize = 12.sp,
                     color = WDInkMute
                 )
+                if (appt.notes.isNotBlank()) {
+                    Text(
+                        text     = "📝 ${appt.notes}",
+                        fontSize = 11.sp,
+                        color    = WDInkMute
+                    )
+                }
             }
             IconButton(
                 onClick  = { showDialog = true },

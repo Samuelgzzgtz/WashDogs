@@ -74,6 +74,7 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
     var endTimeEnabled  by remember { mutableStateOf(false) }
     var repeatEveryDays by remember { mutableStateOf<Int?>(null) }
     var customRepeat    by remember { mutableStateOf("") }
+    var notes           by remember { mutableStateOf("") }
 
     val clientNames    = vm.clients.map { "${it.petName} · ${it.ownerName}" }
     val serviceNames   = WD_SERVICES.map { it.name }
@@ -262,6 +263,18 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                 }
             }
 
+            // Notas de la cita (opcional)
+            item(key = "notes_field") {
+                OutlinedTextField(
+                    value         = notes,
+                    onValueChange = { notes = it },
+                    label         = { Text("Notas (opcional)") },
+                    placeholder   = { Text("Alergias, indicaciones, etc.") },
+                    modifier      = Modifier.fillMaxWidth(),
+                    minLines      = 2
+                )
+            }
+
             // Reagendado recurrente: repetir la cita cada N días
             item(key = "repeat_section") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -347,6 +360,7 @@ fun AddAppointmentScreen(vm: AppViewModel, initialDate: String, onBack: () -> Un
                                     date       = date,
                                     status     = ApptStatus.SCHEDULED,
                                     endTime    = if (endTimeEnabled) endTime else "",
+                                    notes      = notes.trim(),
                                     repeatEveryDays = repeatEveryDays?.takeIf { it > 0 }
                                 )
                             )

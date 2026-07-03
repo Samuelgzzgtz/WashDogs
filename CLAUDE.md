@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**WashDogs** — App Android de gestión para peluquerías caninas: clientes, citas, ingresos/gastos y mensajes de WhatsApp con plantillas. Kotlin + Jetpack Compose, arquitectura single-activity. Versión actual `1.3.2` (versionCode 5).
+**WashDogs** — App Android de gestión para peluquerías caninas: clientes, citas, ingresos/gastos y mensajes de WhatsApp con plantillas. Kotlin + Jetpack Compose, arquitectura single-activity. Versión actual `1.3.3` (versionCode 6).
 
 El módulo de código está en `washdog-native/` (paquete `com.washdog.app`). La raíz del repo solo contiene documentación (`SECURITY.md`, `docs/`).
 
