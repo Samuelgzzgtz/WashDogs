@@ -29,3 +29,12 @@ secrets.properties
 # Signing
 release.keystore
 *.keystore
+
+# Web
+node_modules/
+washdog-web/dist/
+washdog-web/coverage/
+.vercel/
+.env
+.env.*
+!.env.example

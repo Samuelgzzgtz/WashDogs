@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
+**Web instalable (PWA):** `washdog-web/`, React + TypeScript + Vite. Es la migración multiplataforma para iPhone, Android y escritorio. Usa Supabase existente como fuente de verdad; Vercel hospeda la web. Setup, despliegue y límites en `README.md`. Desde `washdog-web/`: `npm ci`, `npm test`, `npm run build`, `npm run dev`. Variables públicas en `.env.local` (ver `.env.example`). La migración aditiva es `supabase/migrations/20261023000000_webapp.sql`; no ejecutar el script destructivo antiguo de `docs/`. Los tests validan RLS y triggers con PostgreSQL embebido. CI web en `.github/workflows/web.yml`. Las instrucciones siguientes describen el Android existente.
+
 **WashDogs** — App Android de gestión para peluquerías caninas: clientes, citas, ingresos/gastos y mensajes de WhatsApp con plantillas. Kotlin + Jetpack Compose, arquitectura single-activity. Versión actual `1.3.4` (versionCode 7).
 
 El módulo de código está en `washdog-native/` (paquete `com.washdog.app`). La raíz del repo solo contiene documentación (`SECURITY.md`, `docs/`).

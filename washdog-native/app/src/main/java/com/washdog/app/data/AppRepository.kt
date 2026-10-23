@@ -13,6 +13,10 @@ import com.washdog.app.data.models.Tombstone
 import com.washdog.app.data.models.Transaction
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
+import com.washdog.app.util.Recurrence
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,6 +38,7 @@ class AppRepository(private val context: Context) {
     private fun keyW(u: String?)    = stringPreferencesKey(LocalKeys.scoped("tpl_welcome", u))
     private fun keyC(u: String?)    = stringPreferencesKey(LocalKeys.scoped("tpl_confirm", u))
     private fun keyR(u: String?)    = stringPreferencesKey(LocalKeys.scoped("tpl_reschedule", u))
+    private fun keyTemplateUpdatedAt(u: String?) = stringPreferencesKey(LocalKeys.scoped("tpl_updated_at", u))
     private fun keyInit(u: String?) = booleanPreferencesKey(LocalKeys.scoped("initialized", u))
     private fun keyTomb(u: String?) = stringPreferencesKey(LocalKeys.scoped("tombstones", u))
     private fun keyUnsynced(u: String?) = booleanPreferencesKey(LocalKeys.scoped("unsynced", u))
@@ -109,13 +114,14 @@ class AppRepository(private val context: Context) {
         saveScope.launch { context.dataStore.edit { it[keyAppt(u)] = gson.toJson(list) } }
     }
 
-    fun saveTemplates(welcome: String, confirm: String, reschedule: String) {
+    fun saveTemplates(welcome: String, confirm: String, reschedule: String, updatedAt: String) {
         val u = userId()
         saveScope.launch {
             context.dataStore.edit { prefs ->
                 prefs[keyW(u)] = welcome
                 prefs[keyC(u)] = confirm
                 prefs[keyR(u)] = reschedule
+                prefs[keyTemplateUpdatedAt(u)] = updatedAt
             }
         }
     }
@@ -153,16 +159,18 @@ class AppRepository(private val context: Context) {
         } catch (e: Exception) { emptyList() }
     }
 
-    suspend fun loadTemplates(): Triple<String, String, String> {
+    suspend fun loadTemplates(): UserSettingsRow {
         return try {
             val u = userId()
             val prefs = context.dataStore.data.first()
-            Triple(
+            UserSettingsRow(
+                u.orEmpty(),
                 prefs[keyW(u)] ?: DEFAULT_WELCOME,
                 prefs[keyC(u)] ?: DEFAULT_CONFIRM,
-                prefs[keyR(u)] ?: DEFAULT_RESCHEDULE
+                prefs[keyR(u)] ?: DEFAULT_RESCHEDULE,
+                prefs[keyTemplateUpdatedAt(u)] ?: ""
             )
-        } catch (e: Exception) { Triple(DEFAULT_WELCOME, DEFAULT_CONFIRM, DEFAULT_RESCHEDULE) }
+        } catch (e: Exception) { UserSettingsRow(userId().orEmpty(), DEFAULT_WELCOME, DEFAULT_CONFIRM, DEFAULT_RESCHEDULE) }
     }
 
     // ── TOMBSTONES + FLAG DE SYNC (local) ───────────────────────────────────────
@@ -216,15 +224,10 @@ class AppRepository(private val context: Context) {
             .upsert(transactions.map { it.toRow(uid) }) { onConflict = "id" }
     }
 
-    suspend fun syncSettingsToCloud(welcome: String, confirm: String, reschedule: String) {
+    suspend fun syncSettingsToCloud(welcome: String, confirm: String, reschedule: String, updatedAt: String) {
         val uid = userId() ?: return
         WashdogSupabase.client.from("user_settings")
-            .upsert(UserSettingsRow(uid, welcome, confirm, reschedule)) { onConflict = "user_id" }
-    }
-
-    suspend fun deleteClientFromCloud(id: String) {
-        userId() ?: return
-        WashdogSupabase.client.from("clients").delete { filter { eq("id", id) } }
+            .upsert(UserSettingsRow(uid, welcome, confirm, reschedule, updatedAt)) { onConflict = "user_id" }
     }
 
     suspend fun deleteAppointmentFromCloud(id: String) {
@@ -241,6 +244,19 @@ class AppRepository(private val context: Context) {
     suspend fun syncTombstonesToCloud(tombstones: List<Tombstone>) {
         val uid = userId() ?: return
         if (tombstones.isEmpty()) return
+        tombstones.filter { it.entity == "clients" }.forEach { deleted ->
+            WashdogSupabase.client.postgrest.rpc("washdog_delete_client", buildJsonObject {
+                put("p_id", deleted.entityId)
+                put("p_deleted_at", deleted.deletedAt)
+            })
+        }
+        // El marcador local sobrevive a cierres y falta de red; retrySync vuelve a ejecutar el RPC.
+        tombstones.filter { it.entity == "appointment_series" }.forEach { stop ->
+            WashdogSupabase.client.postgrest.rpc("washdog_stop_series", buildJsonObject {
+                put("p_series_id", stop.entityId)
+                put("p_today", Recurrence.seriesStopDate(stop.deletedAt))
+            })
+        }
         WashdogSupabase.client.from("tombstones")
             .upsert(tombstones.map { TombstoneRow(uid, it.entity, it.entityId, it.deletedAt) }) {
                 onConflict = "user_id,entity,entity_id"

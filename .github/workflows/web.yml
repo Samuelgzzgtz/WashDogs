@@ -1,0 +1,33 @@
+name: Washdog Web
+
+on:
+  push:
+    branches: [main, master]
+    paths: ['washdog-web/**', 'supabase/**', '.github/workflows/web.yml']
+  pull_request:
+    branches: [main, master]
+    paths: ['washdog-web/**', 'supabase/**', '.github/workflows/web.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: washdog-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: washdog-web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: washdog-web
+          path: washdog-web/dist
