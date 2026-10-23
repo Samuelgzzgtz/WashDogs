@@ -151,7 +151,9 @@ begin
   select exists (select 1 from public.appointments where user_id = new.user_id and id = new.id) into existing;
   if not existing and not exists (select 1 from public.clients c where c.user_id = new.user_id
     and (c.id = new.client_id or (new.client_id = '' and c.owner_name = new.client_name and c.pet_name = new.pet_name))
-    and not public.washdog_is_deleted(c.user_id, 'clients', c.id, c.updated_at)) then return null; end if;
+    and not public.washdog_is_deleted(c.user_id, 'clients', c.id, c.updated_at)) then
+    raise exception 'WASHDOG_CLIENT_MISSING';
+  end if;
   if new.series_id is null or new.repeat_every_days is null then return new; end if;
   if exists (select 1 from public.tombstones where user_id = new.user_id
     and entity = 'appointment_series' and entity_id = new.series_id)

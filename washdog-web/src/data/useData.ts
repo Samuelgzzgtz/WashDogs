@@ -96,7 +96,10 @@ export function useSave(uid: string) {
       void client.invalidateQueries({ queryKey: ['washdog', uid] })
     },
     onError: (error) => {
-      if (error.message === 'WASHDOG_STALE')
+      if (
+        error.message === 'WASHDOG_STALE' ||
+        error.message.includes('WASHDOG_CLIENT_MISSING')
+      )
         void client.invalidateQueries({ queryKey: ['washdog', uid] })
     },
   })
@@ -141,6 +144,8 @@ export function errorMessage(error: unknown): string {
     return 'Ese horario ya está ocupado. Elige otro horario.'
   if (message.includes('WASHDOG_STALE'))
     return 'El registro cambió o fue eliminado en otro dispositivo. Conservamos el formulario; revisa los datos e inténtalo de nuevo.'
+  if (message.includes('WASHDOG_CLIENT_MISSING'))
+    return 'El cliente ya no está disponible. Conservamos el formulario; selecciona otro cliente.'
   if (message.includes('Sin conexión')) return message
   return 'No se pudo guardar en la nube. Tus cambios siguen en el formulario; vuelve a intentarlo.'
 }

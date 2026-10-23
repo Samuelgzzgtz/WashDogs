@@ -303,7 +303,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val toAdd = expandRecurring(a).map { it.copy(updatedAt = now()) }
         appointments.addAll(toAdd)
         repo.saveAppointments(appointments.toList())
-        fireSync { repo.syncAppointmentsToCloud(appointments.toList()) }
+        fireSync {
+            repo.syncClientsToCloud(clients.toList())
+            repo.syncAppointmentsToCloud(appointments.toList())
+        }
     }
 
     /**
@@ -386,7 +389,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (idx >= 0) {
             appointments[idx] = updated.copy(updatedAt = now())
             repo.saveAppointments(appointments.toList())
-            fireSync { repo.syncAppointmentsToCloud(appointments.toList()) }
+            fireSync {
+                repo.syncClientsToCloud(clients.toList())
+                repo.syncAppointmentsToCloud(appointments.toList())
+            }
         }
     }
 

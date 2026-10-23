@@ -285,7 +285,9 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
     await createClient()
     await createAppointment('a1', 'c1', '2026-10-23', 's1')
     await db.exec("delete from public.clients where id = 'c1'")
-    await createAppointment('future', 'c1', '2027-01-08', 's1')
+    await expect(
+      createAppointment('future', 'c1', '2027-01-08', 's1'),
+    ).rejects.toThrow('WASHDOG_CLIENT_MISSING')
     expect((await db.query('select * from public.appointments')).rows).toEqual(
       [],
     )
@@ -380,7 +382,9 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
       'c1',
       '2026-10-23T12:00:00Z',
     ])
-    await createAppointment('late', 'c1', '2027-01-08', 's1')
+    await expect(
+      createAppointment('late', 'c1', '2027-01-08', 's1'),
+    ).rejects.toThrow('WASHDOG_CLIENT_MISSING')
     expect((await db.query('select * from public.clients')).rows).toEqual([])
     expect((await db.query('select * from public.appointments')).rows).toEqual(
       [],
@@ -444,13 +448,29 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
   })
   it('rechaza una serie creada offline que llega después del borrado de su cliente', async () => {
     await db.exec("delete from public.clients where id = 'c1'")
-    await createAppointment('offline-new', 'c1', '2027-01-08', 'offline-series')
+    await expect(
+      createAppointment('offline-new', 'c1', '2027-01-08', 'offline-series'),
+    ).rejects.toThrow('WASHDOG_CLIENT_MISSING')
     expect((await db.query('select * from public.appointments')).rows).toEqual(
       [],
     )
     expect(
       (await db.query('select * from public.appointment_series')).rows,
     ).toEqual([])
+  })
+  it('avisa si una cita llega antes que su cliente y permite reintentar después de subirlo', async () => {
+    await expect(createAppointment('early', 'not-uploaded')).rejects.toThrow(
+      'WASHDOG_CLIENT_MISSING',
+    )
+    expect((await db.query('select * from public.appointments')).rows).toEqual(
+      [],
+    )
+    expect((await db.query('select * from public.tombstones')).rows).toEqual([])
+    await createClient('not-uploaded')
+    await createAppointment('early', 'not-uploaded')
+    expect(
+      (await db.query('select id,client_id from public.appointments')).rows,
+    ).toEqual([{ id: 'early', client_id: 'not-uploaded' }])
   })
   it('conserva la fecha original del borrado offline y acepta una edición posterior todavía sin subir', async () => {
     await db.query('select public.washdog_delete_client($1,$2)', [
