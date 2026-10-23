@@ -3,8 +3,10 @@ name: Washdog CI
 on:
   push:
     branches: [main, master]
+    paths: ['washdog-native/**', '.github/workflows/main.yml']
   pull_request:
     branches: [main, master]
+    paths: ['washdog-native/**', '.github/workflows/main.yml']
 
 permissions:
   contents: write
