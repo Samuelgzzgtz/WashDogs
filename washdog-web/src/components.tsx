@@ -167,6 +167,23 @@ export function InstallApp() {
   )
 }
 
+export async function applyAppUpdate(
+  updateServiceWorker: (reloadPage?: boolean) => Promise<void>,
+) {
+  const registration = await navigator.serviceWorker.getRegistration()
+  if (!registration?.waiting) {
+    window.location.reload()
+    return
+  }
+  // Workbox may classify an update from another tab as external and skip its reload.
+  navigator.serviceWorker.addEventListener(
+    'controllerchange',
+    () => window.location.reload(),
+    { once: true },
+  )
+  await updateServiceWorker(true)
+}
+
 export function AppUpdate() {
   const {
     needRefresh: [refresh],
@@ -176,7 +193,7 @@ export function AppUpdate() {
     refresh && (
       <aside className="update-notice" role="status">
         <span>Hay una nueva versión de Washdog.</span>
-        <button onClick={() => void updateServiceWorker(true)}>
+        <button onClick={() => void applyAppUpdate(updateServiceWorker)}>
           Actualizar
         </button>
       </aside>
