@@ -370,4 +370,73 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
       (await db.query('select deleted_at from public.tombstones')).rows,
     ).toEqual([{ deleted_at: '2026-10-23T12:00:00Z' }])
   })
+  it('reproduce el borrado de un cliente offline y detiene sus series antes de volver a subir datos', async () => {
+    await createClient()
+    await createAppointment('a1', 'c1', '2026-10-23', 's1')
+    await db.query('select public.washdog_delete_client($1,$2)', [
+      'c1',
+      '2026-10-23T12:00:00Z',
+    ])
+    await createAppointment('late', 'c1', '2027-01-08', 's1')
+    expect((await db.query('select * from public.clients')).rows).toEqual([])
+    expect((await db.query('select * from public.appointments')).rows).toEqual(
+      [],
+    )
+    expect(
+      (
+        await db.query(
+          "select stopped_at <> '' as stopped from public.appointment_series",
+        )
+      ).rows,
+    ).toEqual([{ stopped: true }])
+  })
+  it('un borrado offline antiguo conserva una edición posterior y respeta la cuenta autenticada', async () => {
+    await createClient()
+    await db.exec(
+      "update public.clients set updated_at = '2099-01-01T00:00:00Z'",
+    )
+    await db.query('select public.washdog_delete_client($1,$2)', [
+      'c1',
+      '2026-10-23T12:00:00Z',
+    ])
+    expect((await db.query('select id from public.clients')).rows).toHaveLength(
+      1,
+    )
+    await asUser(other)
+    await db.query('select public.washdog_delete_client($1,$2)', [
+      'c1',
+      '2099-02-01T00:00:00Z',
+    ])
+    await asUser(owner)
+    expect((await db.query('select id from public.clients')).rows).toHaveLength(
+      1,
+    )
+  })
+  it('detener una serie no revive una visita DONE borrada lógicamente', async () => {
+    await createClient()
+    await createAppointment('ghost-done', 'c1', '2026-10-16', 's1', 'DONE')
+    await db.query(
+      "insert into public.tombstones values ($1,'appointments','ghost-done','2026-10-23T12:00:00Z')",
+      [owner],
+    )
+    await db.query('select public.washdog_stop_series($1,$2)', [
+      's1',
+      '2026-10-23',
+    ])
+    expect(
+      (
+        await db.query(
+          "select updated_at from public.appointments where id = 'ghost-done'",
+        )
+      ).rows,
+    ).toEqual([{ updated_at: '' }])
+    expect(
+      (
+        await db.query(
+          "select public.washdog_is_deleted($1, 'appointments', 'ghost-done', '') as deleted",
+          [owner],
+        )
+      ).rows,
+    ).toEqual([{ deleted: true }])
+  })
 })

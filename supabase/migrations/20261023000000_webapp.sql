@@ -37,6 +37,15 @@ alter table public.appointments add column if not exists series_id text;
 alter table public.transactions add column if not exists updated_at text not null default '';
 alter table public.user_settings add column if not exists updated_at text not null default '';
 
+-- All side effects must use the same deletion check before advancing a row's version.
+create or replace function public.washdog_is_deleted(p_user_id uuid, p_entity text, p_id text, p_updated_at text)
+returns boolean language sql stable security invoker set search_path = '' as $$
+  select exists (select 1 from public.tombstones t where t.user_id = p_user_id and t.entity = p_entity
+    and t.entity_id = p_id and t.deleted_at::timestamptz >= coalesce(nullif(p_updated_at, '')::timestamptz, '-infinity'::timestamptz));
+$$;
+revoke all on function public.washdog_is_deleted(uuid, text, text, text) from public;
+grant execute on function public.washdog_is_deleted(uuid, text, text, text) to authenticated;
+
 -- Keep the recurrence rule independent from individual occurrences that can be moved or edited.
 create table if not exists public.appointment_series (
   id text primary key, user_id uuid not null references auth.users(id) on delete cascade,
@@ -50,15 +59,9 @@ from public.appointments a where series_id is not null and repeat_every_days > 0
   and not exists (select 1 from public.tombstones t where t.user_id = a.user_id
     and t.entity = 'appointment_series' and t.entity_id = a.series_id)
   and exists (select 1 from public.clients c where c.user_id = a.user_id
-    and (c.id = a.client_id or (a.client_id = '' and c.owner_name = a.client_name and c.pet_name = a.pet_name)))
-  and not exists (select 1 from public.tombstones t where t.user_id = a.user_id and t.entity = 'appointments'
-    and t.entity_id = a.id and t.deleted_at::timestamptz >= coalesce(nullif(a.updated_at, '')::timestamptz, '-infinity'::timestamptz))
-  and not exists (select 1 from public.tombstones t where t.user_id = a.user_id and t.entity = 'clients'
-    and (t.entity_id = a.client_id or (a.client_id = '' and exists (
-      select 1 from public.clients c where c.user_id = a.user_id and c.id = t.entity_id
-        and c.owner_name = a.client_name and c.pet_name = a.pet_name)))
-    and not exists (select 1 from public.clients c where c.user_id = a.user_id and c.id = t.entity_id
-      and coalesce(nullif(c.updated_at, '')::timestamptz, '-infinity'::timestamptz) > t.deleted_at::timestamptz))
+    and (c.id = a.client_id or (a.client_id = '' and c.owner_name = a.client_name and c.pet_name = a.pet_name))
+    and not public.washdog_is_deleted(c.user_id, 'clients', c.id, c.updated_at))
+  and not public.washdog_is_deleted(a.user_id, 'appointments', a.id, a.updated_at)
 order by user_id, series_id, (id like series_id || '@%') desc, date
 on conflict (id) do nothing;
 
@@ -112,9 +115,7 @@ begin
   if tg_table_name = 'user_settings' then
     select updated_at into current_updated_at from public.user_settings where user_id = new.user_id;
   else
-    if exists (select 1 from public.tombstones t where t.user_id = new.user_id
-      and t.entity = tg_table_name and t.entity_id = new.id
-      and t.deleted_at::timestamptz >= coalesce(nullif(new.updated_at, '')::timestamptz, '-infinity'::timestamptz)) then
+    if public.washdog_is_deleted(new.user_id, tg_table_name, new.id, new.updated_at) then
       return null;
     end if;
     execute format('select updated_at from public.%I where id = $1 and user_id = $2', tg_table_name)
@@ -136,9 +137,7 @@ begin
       updated_at = to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
     where user_id = old.user_id and (client_id = old.id or
       (client_id = '' and client_name = old.owner_name and pet_name = old.pet_name))
-      and not exists (select 1 from public.tombstones t where t.user_id = appointments.user_id
-        and t.entity = 'appointments' and t.entity_id = appointments.id
-        and t.deleted_at::timestamptz >= coalesce(nullif(appointments.updated_at, '')::timestamptz, '-infinity'::timestamptz));
+      and not public.washdog_is_deleted(appointments.user_id, 'appointments', appointments.id, appointments.updated_at);
   end if;
   return new;
 end $$;
@@ -176,7 +175,8 @@ begin
   if new.status = 'DONE' then
     update public.clients set last_visit = greatest(last_visit, new.date), needs_reschedule = false,
       updated_at = to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
-    where user_id = new.user_id and (last_visit < new.date or needs_reschedule) and (id = new.client_id or
+    where user_id = new.user_id and (last_visit < new.date or needs_reschedule)
+      and not public.washdog_is_deleted(user_id, 'clients', id, updated_at) and (id = new.client_id or
       (new.client_id = '' and owner_name = new.client_name and pet_name = new.pet_name));
   end if;
   return new;
@@ -202,8 +202,7 @@ begin
     select 1 from public.appointments a where a.user_id = new.user_id and a.date = new.date
       and a.id <> new.id and a.time <> '' and start_at < coalesce(nullif(a.end_time, '')::time, a.time::time + interval '1 hour')
       and finish_at > a.time::time
-      and not exists (select 1 from public.tombstones t where t.user_id = a.user_id and t.entity = 'appointments'
-        and t.entity_id = a.id and t.deleted_at::timestamptz >= coalesce(nullif(a.updated_at, '')::timestamptz, '-infinity'::timestamptz))
+      and not public.washdog_is_deleted(a.user_id, 'appointments', a.id, a.updated_at)
   ) then raise exception 'WASHDOG_OVERLAP'; end if;
   return new;
 end $$;
@@ -247,11 +246,23 @@ begin
   -- Disable historical occurrences too, otherwise Android would top up the series again.
   update public.appointments set repeat_every_days = null,
     updated_at = to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
-    where user_id = auth.uid() and series_id = p_series_id and repeat_every_days is not null;
+    where user_id = auth.uid() and series_id = p_series_id and repeat_every_days is not null
+      and not public.washdog_is_deleted(user_id, 'appointments', id, updated_at);
   delete from public.appointments where user_id = auth.uid() and series_id = p_series_id
     and date >= p_today and status <> 'DONE';
 end $$;
 revoke all on function public.washdog_stop_series(text, text) from public;
 grant execute on function public.washdog_stop_series(text, text) to authenticated;
+
+-- Replay an Android offline deletion without deleting a later, intentional client edit.
+create or replace function public.washdog_delete_client(p_id text, p_deleted_at text) returns void
+language plpgsql security invoker set search_path = '' as $$
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  delete from public.clients where user_id = auth.uid() and id = p_id
+    and coalesce(nullif(updated_at, '')::timestamptz, '-infinity'::timestamptz) <= p_deleted_at::timestamptz;
+end $$;
+revoke all on function public.washdog_delete_client(text, text) from public;
+grant execute on function public.washdog_delete_client(text, text) to authenticated;
 
 commit;

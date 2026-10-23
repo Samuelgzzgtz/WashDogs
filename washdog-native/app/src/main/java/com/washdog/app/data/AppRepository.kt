@@ -245,6 +245,12 @@ class AppRepository(private val context: Context) {
     suspend fun syncTombstonesToCloud(tombstones: List<Tombstone>) {
         val uid = userId() ?: return
         if (tombstones.isEmpty()) return
+        tombstones.filter { it.entity == "clients" }.forEach { deleted ->
+            WashdogSupabase.client.postgrest.rpc("washdog_delete_client", buildJsonObject {
+                put("p_id", deleted.entityId)
+                put("p_deleted_at", deleted.deletedAt)
+            })
+        }
         // El marcador local sobrevive a cierres y falta de red; retrySync vuelve a ejecutar el RPC.
         tombstones.filter { it.entity == "appointment_series" }.forEach { stop ->
             WashdogSupabase.client.postgrest.rpc("washdog_stop_series", buildJsonObject {
