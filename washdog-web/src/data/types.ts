@@ -49,6 +49,12 @@ export type Tombstone = {
   entity_id: string
   deleted_at: string
 }
+export type AppointmentSeries = {
+  id: string
+  user_id: string
+  template: Appointment
+  stopped_at: string
+}
 type Table<Row> = {
   Row: Row
   Insert: Row
@@ -63,6 +69,7 @@ export type Database = {
       transactions: Table<Transaction>
       user_settings: Table<Settings>
       tombstones: Table<Tombstone>
+      appointment_series: Table<AppointmentSeries>
     }
     Views: { [_ in never]: never }
     Functions: {

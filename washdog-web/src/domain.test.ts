@@ -116,7 +116,10 @@ describe('agenda y compatibilidad Android', () => {
       deleted_at: '2026-10-23T12:00:00Z',
     }
     const rows = [base, { ...appointment, id: 'busy', date: '2026-11-13' }]
-    const missing = missingAppointments(rows, [deleted], '2026-10-30')
+    const series = [
+      { id: 'series', user_id: 'u1', template: base, stopped_at: '' },
+    ]
+    const missing = missingAppointments(rows, [deleted], series, '2026-10-30')
     expect(missing[0].id).toBe('series@2026-10-30')
     expect(
       missing.some(
@@ -127,15 +130,37 @@ describe('agenda y compatibilidad Android', () => {
       ),
     ).toBe(false)
     expect(
-      missingAppointments([...rows, ...missing], [deleted], '2026-10-30'),
+      missingAppointments(
+        [...rows, ...missing],
+        [deleted],
+        series,
+        '2026-10-30',
+      ),
     ).toEqual([])
     expect(
       missingAppointments(
         [{ ...base, repeat_every_days: null }],
         [],
+        [{ ...series[0], stopped_at: '2026-10-30T10:00:00Z' }],
         '2026-10-30',
       ),
     ).toEqual([])
+  })
+  it('mover una sola ocurrencia no cambia las fechas ni los horarios futuros de la serie', () => {
+    const base = { ...appointment, repeat_every_days: 7, series_id: 'series' }
+    const series = [
+      { id: 'series', user_id: 'u1', template: base, stopped_at: '' },
+    ]
+    const edited = {
+      ...base,
+      date: '2026-10-24',
+      time: '11:00',
+      end_time: '12:00',
+    }
+    const missing = missingAppointments([edited], [], series, '2026-10-24')
+    expect(missing[0].date).toBe('2026-10-30')
+    expect(missing.every((a) => a.time === '09:00')).toBe(true)
+    expect(missing.some((a) => a.date === '2026-10-31')).toBe(false)
   })
   it('resuelve nombres actuales por ID y no confunde mascotas con el mismo dueño en datos legacy', () => {
     expect(

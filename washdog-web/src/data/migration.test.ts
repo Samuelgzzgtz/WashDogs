@@ -54,7 +54,7 @@ beforeAll(async () => {
 }, 60_000)
 beforeEach(async () => {
   await db.exec(
-    'reset role; truncate public.clients, public.appointments, public.transactions, public.tombstones, public.user_settings;',
+    'reset role; truncate public.clients, public.appointments, public.transactions, public.tombstones, public.user_settings, public.appointment_series;',
   )
   await db.exec(
     `insert into auth.users values ('${owner}'), ('${other}') on conflict do nothing;`,
@@ -208,5 +208,90 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
       [],
     )
     expect((await db.query('select * from public.tombstones')).rows).toEqual([])
+  })
+  it('vincula citas legacy antes de renombrar al cliente y mantiene el borrado en cascada', async () => {
+    await createClient()
+    await createAppointment('legacy', '')
+    await db.exec(
+      "update public.clients set owner_name = 'Renombrado', pet_name = 'Nueva Luna' where id = 'c1'",
+    )
+    expect(
+      (
+        await db.query(
+          'select client_id,client_name,pet_name from public.appointments',
+        )
+      ).rows,
+    ).toEqual([
+      { client_id: 'c1', client_name: 'Renombrado', pet_name: 'Nueva Luna' },
+    ])
+    await db.exec("delete from public.clients where id = 'c1'")
+    expect((await db.query('select * from public.appointments')).rows).toEqual(
+      [],
+    )
+  })
+  it('guarda una regla estable al crear la serie y no la cambia al editar una ocurrencia', async () => {
+    await createAppointment('first', 'c1', '2026-10-23', 's1')
+    await db.exec(
+      "update public.appointments set date = '2026-10-24', time = '11:00', end_time = '12:00' where id = 'first'",
+    )
+    expect(
+      (
+        await db.query(
+          "select template->>'date' as date, template->>'time' as time from public.appointment_series",
+        )
+      ).rows,
+    ).toEqual([{ date: '2026-10-23', time: '09:00' }])
+  })
+  it('rechaza ampliaciones calculadas antes de detener la serie', async () => {
+    await createAppointment('past', 'c1', '2026-10-16', 's1', 'DONE')
+    await db.query('select public.washdog_stop_series($1,$2)', [
+      's1',
+      '2026-10-23',
+    ])
+    await createAppointment('late-generated', 'c1', '2027-01-08', 's1')
+    expect((await db.query('select id from public.appointments')).rows).toEqual(
+      [{ id: 'past' }],
+    )
+  })
+  it('reenviar una visita DONE sin cambios no adelanta la versión del cliente', async () => {
+    await createClient()
+    await createAppointment('done', 'c1', '2026-10-23', null, 'DONE')
+    const before = (await db.query('select updated_at from public.clients'))
+      .rows
+    await db.exec(
+      "update public.appointments set status = 'DONE' where id = 'done'",
+    )
+    expect(
+      (await db.query('select updated_at from public.clients')).rows,
+    ).toEqual(before)
+  })
+  it('conserva las plantillas web ante una sincronización antigua de Android', async () => {
+    await db.query(
+      "insert into public.user_settings values ($1,'Actual','Confirmación','Nueva visita','2026-10-23T12:00:00Z')",
+      [owner],
+    )
+    await db.query(
+      "insert into public.user_settings values ($1,'Antigua','Antigua','Antigua','') on conflict (user_id) do update set tpl_welcome = excluded.tpl_welcome, updated_at = excluded.updated_at",
+      [owner],
+    )
+    expect(
+      (await db.query('select tpl_welcome from public.user_settings')).rows,
+    ).toEqual([{ tpl_welcome: 'Actual' }])
+  })
+  it('eliminar un cliente detiene sus series y evita que vuelvan a aparecer citas', async () => {
+    await createClient()
+    await createAppointment('a1', 'c1', '2026-10-23', 's1')
+    await db.exec("delete from public.clients where id = 'c1'")
+    await createAppointment('future', 'c1', '2027-01-08', 's1')
+    expect((await db.query('select * from public.appointments')).rows).toEqual(
+      [],
+    )
+    expect(
+      (
+        await db.query(
+          "select stopped_at <> '' as stopped from public.appointment_series",
+        )
+      ).rows,
+    ).toEqual([{ stopped: true }])
   })
 })

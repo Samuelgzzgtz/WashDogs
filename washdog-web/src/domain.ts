@@ -1,4 +1,10 @@
-import type { Appointment, Client, Tombstone, Transaction } from './data/types'
+import type {
+  Appointment,
+  AppointmentSeries,
+  Client,
+  Tombstone,
+  Transaction,
+} from './data/types'
 
 export const services = [
   ['Baño Perro Pequeño', 200],
@@ -111,15 +117,9 @@ export function recurringAppointments(
 export function missingAppointments(
   appointments: Appointment[],
   tombstones: Tombstone[],
+  series: AppointmentSeries[],
   today = isoDate(),
 ): Appointment[] {
-  const templates = new Map<string, Appointment>()
-  for (const a of [...appointments].sort((a, b) =>
-    a.date.localeCompare(b.date),
-  )) {
-    if (a.series_id && a.repeat_every_days && !templates.has(a.series_id))
-      templates.set(a.series_id, a)
-  }
   const existingIds = new Set(appointments.map((a) => a.id))
   const deletedIds = new Set(
     tombstones
@@ -127,7 +127,8 @@ export function missingAppointments(
       .map((t) => t.entity_id),
   )
   const result: Appointment[] = []
-  for (const base of templates.values()) {
+  for (const { template: base, stopped_at } of series) {
+    if (stopped_at) continue
     for (const row of recurringAppointments(base, addDays(today, 90))) {
       if (
         row.date < today ||

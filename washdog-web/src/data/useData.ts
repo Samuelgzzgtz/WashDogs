@@ -38,20 +38,21 @@ export async function loadRows<T extends TableName>(
 }
 
 export async function loadSnapshot(uid: string): Promise<Snapshot> {
-  const [clients, appointments, transactions, settings, tombstones] =
+  const [clients, appointments, transactions, settings, tombstones, series] =
     await Promise.all([
       loadRows('clients', uid),
       loadRows('appointments', uid),
       loadRows('transactions', uid),
       loadRows('user_settings', uid),
       loadRows('tombstones', uid),
+      loadRows('appointment_series', uid),
     ])
   let visibleAppointments = visibleRows(
     appointments,
     tombstones,
     'appointments',
   )
-  const missing = missingAppointments(visibleAppointments, tombstones)
+  const missing = missingAppointments(visibleAppointments, tombstones, series)
   if (missing.length) {
     const { error } = await supabase!
       .from('appointments')
@@ -84,6 +85,8 @@ export function useData(uid: string) {
 export function useSave(uid: string) {
   const client = useQueryClient()
   return useMutation({
+    // Offline writes fail immediately, keeping the editable form instead of queuing a save.
+    networkMode: 'always',
     mutationFn: async (action: () => Promise<void>) => {
       if (!navigator.onLine)
         throw new Error('Sin conexión. Reconéctate e inténtalo de nuevo.')
@@ -93,10 +96,9 @@ export function useSave(uid: string) {
   })
 }
 
-export async function saveRow<T extends Exclude<TableName, 'tombstones'>>(
-  table: T,
-  row: Database['public']['Tables'][T]['Row'],
-) {
+export async function saveRow<
+  T extends 'clients' | 'appointments' | 'transactions' | 'user_settings',
+>(table: T, row: Database['public']['Tables'][T]['Row']) {
   if (!supabase) throw new Error('La app no está conectada.')
   // Ownership is checked by RLS as well as the session-scoped queries.
   const { error } = await supabase.from(table).upsert(row as never)
