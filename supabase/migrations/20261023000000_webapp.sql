@@ -152,6 +152,9 @@ begin
   if not existing and not exists (select 1 from public.clients c where c.user_id = new.user_id
     and (c.id = new.client_id or (new.client_id = '' and c.owner_name = new.client_name and c.pet_name = new.pet_name))
     and not public.washdog_is_deleted(c.user_id, 'clients', c.id, c.updated_at)) then
+    -- A known deletion is final for orphan uploads; a missing parent must remain retryable.
+    if exists (select 1 from public.tombstones where user_id = new.user_id
+      and entity = 'clients' and entity_id = new.client_id) then return null; end if;
     raise exception 'WASHDOG_CLIENT_MISSING';
   end if;
   if new.series_id is null or new.repeat_every_days is null then return new; end if;

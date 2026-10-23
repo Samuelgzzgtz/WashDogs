@@ -285,9 +285,7 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
     await createClient()
     await createAppointment('a1', 'c1', '2026-10-23', 's1')
     await db.exec("delete from public.clients where id = 'c1'")
-    await expect(
-      createAppointment('future', 'c1', '2027-01-08', 's1'),
-    ).rejects.toThrow('WASHDOG_CLIENT_MISSING')
+    await createAppointment('future', 'c1', '2027-01-08', 's1')
     expect((await db.query('select * from public.appointments')).rows).toEqual(
       [],
     )
@@ -382,9 +380,7 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
       'c1',
       '2026-10-23T12:00:00Z',
     ])
-    await expect(
-      createAppointment('late', 'c1', '2027-01-08', 's1'),
-    ).rejects.toThrow('WASHDOG_CLIENT_MISSING')
+    await createAppointment('late', 'c1', '2027-01-08', 's1')
     expect((await db.query('select * from public.clients')).rows).toEqual([])
     expect((await db.query('select * from public.appointments')).rows).toEqual(
       [],
@@ -448,15 +444,32 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
   })
   it('rechaza una serie creada offline que llega después del borrado de su cliente', async () => {
     await db.exec("delete from public.clients where id = 'c1'")
-    await expect(
-      createAppointment('offline-new', 'c1', '2027-01-08', 'offline-series'),
-    ).rejects.toThrow('WASHDOG_CLIENT_MISSING')
+    await createAppointment('offline-new', 'c1', '2027-01-08', 'offline-series')
     expect((await db.query('select * from public.appointments')).rows).toEqual(
       [],
     )
     expect(
       (await db.query('select * from public.appointment_series')).rows,
     ).toEqual([])
+  })
+  it('sincroniza las citas válidas del lote aunque incluya una cita offline de un cliente borrado', async () => {
+    await createClient('c2')
+    await db.exec("delete from public.clients where id = 'c1'")
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await db.query(
+        `insert into public.appointments(id,user_id,client_id,client_name,pet_name,date,time,series_id,repeat_every_days)
+        values ('orphan',$1,'c1','Samuel','Luna','2026-10-23','09:00','orphan-series',7),
+        ('valid',$1,'c2','Samuel','Toby','2026-10-23','10:00',null,null)
+        on conflict(id) do update set date = excluded.date`,
+        [owner],
+      )
+      expect(
+        (await db.query('select id,client_id from public.appointments')).rows,
+      ).toEqual([{ id: 'valid', client_id: 'c2' }])
+      expect(
+        (await db.query('select * from public.appointment_series')).rows,
+      ).toEqual([])
+    }
   })
   it('avisa si una cita llega antes que su cliente y permite reintentar después de subirlo', async () => {
     await expect(createAppointment('early', 'not-uploaded')).rejects.toThrow(
