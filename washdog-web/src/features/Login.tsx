@@ -106,7 +106,7 @@ export function Login({ sessionError }: { sessionError: string }) {
             </fieldset>
           </form>
           <p className="login-existing">
-            Usa la misma cuenta de tu app Android.
+            Tu información, guardada en la nube.
           </p>
           <div className="login-install">
             <p>Siempre a la mano, también en iPhone.</p>
