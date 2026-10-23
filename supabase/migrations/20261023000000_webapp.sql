@@ -47,6 +47,18 @@ select distinct on (user_id, series_id) series_id, user_id,
   to_jsonb(a) || jsonb_build_object('date', case
     when id like series_id || '@%' then split_part(id, '@', 2) else date end)
 from public.appointments a where series_id is not null and repeat_every_days > 0
+  and not exists (select 1 from public.tombstones t where t.user_id = a.user_id
+    and t.entity = 'appointment_series' and t.entity_id = a.series_id)
+  and exists (select 1 from public.clients c where c.user_id = a.user_id
+    and (c.id = a.client_id or (a.client_id = '' and c.owner_name = a.client_name and c.pet_name = a.pet_name)))
+  and not exists (select 1 from public.tombstones t where t.user_id = a.user_id and t.entity = 'appointments'
+    and t.entity_id = a.id and t.deleted_at::timestamptz >= coalesce(nullif(a.updated_at, '')::timestamptz, '-infinity'::timestamptz))
+  and not exists (select 1 from public.tombstones t where t.user_id = a.user_id and t.entity = 'clients'
+    and (t.entity_id = a.client_id or (a.client_id = '' and exists (
+      select 1 from public.clients c where c.user_id = a.user_id and c.id = t.entity_id
+        and c.owner_name = a.client_name and c.pet_name = a.pet_name)))
+    and not exists (select 1 from public.clients c where c.user_id = a.user_id and c.id = t.entity_id
+      and coalesce(nullif(c.updated_at, '')::timestamptz, '-infinity'::timestamptz) > t.deleted_at::timestamptz))
 order by user_id, series_id, (id like series_id || '@%') desc, date
 on conflict (id) do nothing;
 
@@ -84,6 +96,15 @@ exception when foreign_key_violation then
   return old;
 end $$;
 
+create or replace function public.washdog_keep_latest_deletion() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.deleted_at::timestamptz < old.deleted_at::timestamptz then
+    new.deleted_at = old.deleted_at;
+  end if;
+  return new;
+end $$;
+
 create or replace function public.washdog_ignore_deleted_write() returns trigger
 language plpgsql set search_path = '' as $$
 declare current_updated_at text;
@@ -114,7 +135,10 @@ begin
     update public.appointments set client_id = old.id, client_name = new.owner_name, pet_name = new.pet_name,
       updated_at = to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
     where user_id = old.user_id and (client_id = old.id or
-      (client_id = '' and client_name = old.owner_name and pet_name = old.pet_name));
+      (client_id = '' and client_name = old.owner_name and pet_name = old.pet_name))
+      and not exists (select 1 from public.tombstones t where t.user_id = appointments.user_id
+        and t.entity = 'appointments' and t.entity_id = appointments.id
+        and t.deleted_at::timestamptz >= coalesce(nullif(appointments.updated_at, '')::timestamptz, '-infinity'::timestamptz));
   end if;
   return new;
 end $$;
@@ -124,6 +148,8 @@ language plpgsql set search_path = '' as $$
 begin
   if new.series_id is null or new.repeat_every_days is null then return new; end if;
   perform pg_advisory_xact_lock(hashtextextended(new.user_id::text, 0));
+  if exists (select 1 from public.tombstones where user_id = new.user_id
+    and entity = 'appointment_series' and entity_id = new.series_id) then return null; end if;
   if exists (select 1 from public.appointment_series where user_id = new.user_id and id = new.series_id and stopped_at <> '') then
     return null;
   end if;
@@ -193,6 +219,8 @@ drop trigger if exists washdog_00_stale on public.user_settings;
 create trigger washdog_00_stale before insert or update on public.user_settings for each row execute function public.washdog_ignore_deleted_write();
 drop trigger if exists washdog_01_series on public.appointments;
 create trigger washdog_01_series before insert or update on public.appointments for each row execute function public.washdog_track_series();
+drop trigger if exists washdog_tombstone_latest on public.tombstones;
+create trigger washdog_tombstone_latest before update on public.tombstones for each row execute function public.washdog_keep_latest_deletion();
 drop trigger if exists washdog_client_rename on public.clients;
 create trigger washdog_client_rename before update of owner_name, pet_name on public.clients for each row execute function public.washdog_link_renamed_client();
 
@@ -215,11 +243,11 @@ begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
   perform pg_advisory_xact_lock(hashtextextended(auth.uid()::text, 0));
   update public.appointment_series set stopped_at = to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
-    where user_id = auth.uid() and id = p_series_id;
+    where user_id = auth.uid() and id = p_series_id and stopped_at = '';
   -- Disable historical occurrences too, otherwise Android would top up the series again.
   update public.appointments set repeat_every_days = null,
     updated_at = to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
-    where user_id = auth.uid() and series_id = p_series_id;
+    where user_id = auth.uid() and series_id = p_series_id and repeat_every_days is not null;
   delete from public.appointments where user_id = auth.uid() and series_id = p_series_id
     and date >= p_today and status <> 'DONE';
 end $$;

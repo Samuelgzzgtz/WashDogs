@@ -145,6 +145,14 @@ describe('agenda y compatibilidad Android', () => {
         '2026-10-30',
       ),
     ).toEqual([])
+    expect(
+      missingAppointments(
+        rows,
+        [{ ...deleted, entity: 'appointment_series', entity_id: 'series' }],
+        series,
+        '2026-10-30',
+      ),
+    ).toEqual([])
   })
   it('mover una sola ocurrencia no cambia las fechas ni los horarios futuros de la serie', () => {
     const base = { ...appointment, repeat_every_days: 7, series_id: 'series' }

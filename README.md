@@ -32,6 +32,8 @@ Las pruebas ejecutan la migración y los permisos sobre PostgreSQL embebido, sin
 3. Añadir `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` en las variables de Vercel para Production y Preview. Crear el despliegue. Si cambian las variables, volver a desplegar.
 4. Verificar inicio de sesión con la cuenta existente y comprobar sus clientes, citas y movimientos antes de retirar Android. Los datos que Android aún tenga pendientes de sincronizar deben subirse desde ese dispositivo primero.
 
+Si Android sigue usándose durante la transición, actualizarlo con los cambios de este PR después de aplicar la migración. La cancelación de series usa el mismo RPC que la web y conserva un marcador local para reintentar sin conexión. Las versiones Android anteriores no conocen esa cancelación permanente.
+
 Vercel hospeda la web y proporciona HTTPS. Supabase conserva autenticación y base de datos; el disco de una función de Vercel no se usa para persistir información.
 
 ## Instalar y compartir

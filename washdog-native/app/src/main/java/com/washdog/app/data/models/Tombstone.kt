@@ -2,7 +2,7 @@ package com.washdog.app.data.models
 
 /**
  * Registro local de un borrado, para propagarlo entre dispositivos (last-write-wins de
- * borrados). [entity] es "clients" | "appointments" | "transactions"; [deletedAt] es un
+ * borrados). [entity] es "clients" | "appointments" | "transactions" | "appointment_series"; [deletedAt] es un
  * instante ISO-8601.
  */
 data class Tombstone(

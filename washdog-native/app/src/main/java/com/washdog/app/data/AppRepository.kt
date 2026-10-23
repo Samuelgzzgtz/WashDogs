@@ -13,6 +13,10 @@ import com.washdog.app.data.models.Tombstone
 import com.washdog.app.data.models.Transaction
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
+import com.washdog.app.util.Recurrence
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -241,6 +245,13 @@ class AppRepository(private val context: Context) {
     suspend fun syncTombstonesToCloud(tombstones: List<Tombstone>) {
         val uid = userId() ?: return
         if (tombstones.isEmpty()) return
+        // El marcador local sobrevive a cierres y falta de red; retrySync vuelve a ejecutar el RPC.
+        tombstones.filter { it.entity == "appointment_series" }.forEach { stop ->
+            WashdogSupabase.client.postgrest.rpc("washdog_stop_series", buildJsonObject {
+                put("p_series_id", stop.entityId)
+                put("p_today", Recurrence.seriesStopDate(stop.deletedAt))
+            })
+        }
         WashdogSupabase.client.from("tombstones")
             .upsert(tombstones.map { TombstoneRow(uid, it.entity, it.entityId, it.deletedAt) }) {
                 onConflict = "user_id,entity,entity_id"

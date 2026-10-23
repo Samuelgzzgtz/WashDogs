@@ -149,7 +149,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             tombstoneMap("appointments"), { it.id }, { it.updatedAt }
         )
         // Migración v1.3.0: rellenar clientId faltante de citas legacy por nombre.
-        val toppedAppt = topUpRecurringSeries(mergedAppt)
+        val stoppedAppt = allTombstones.filter { it.entity == "appointment_series" }
+            .fold(mergedAppt) { current, stop -> Recurrence.stopSeries(current, stop.entityId, stop.deletedAt) }
+        val toppedAppt = topUpRecurringSeries(stoppedAppt)
         val finalAppt = ClientLink.backfill(toppedAppt, finalCl)
         val finalTx = SyncMerge.applyTombstones(
             SyncMerge.mergeByUpdatedAt(localTx, cloud?.transactions ?: emptyList(), { it.id }, { it.updatedAt }),
@@ -191,11 +193,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun pushToCloud() {
         viewModelScope.launch {
             try {
+                repo.syncTombstonesToCloud(tombstones.toList())
                 repo.syncClientsToCloud(clients.toList())
                 repo.syncAppointmentsToCloud(appointments.toList())
                 repo.syncTransactionsToCloud(transactions.toList())
                 repo.syncSettingsToCloud(tplWelcome, tplConfirm, tplReschedule)
-                repo.syncTombstonesToCloud(tombstones.toList())
                 pendingSync = false; repo.setUnsynced(false)
             } catch (_: Exception) {
                 pendingSync = true; repo.setUnsynced(true)
@@ -328,18 +330,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return listOf(head) + extra
     }
 
-    /** Detiene una serie recurrente: borra sus ocurrencias FUTURAS (fecha >= hoy). */
+    /** Detiene una serie de forma duradera; conserva historial y visitas completadas. */
     fun stopSeries(seriesId: String) {
-        val today = LocalDate.now().toString()
-        val toRemove = appointments.filter {
-            it.seriesId == seriesId && it.date >= today
-        }.map { it.id }
-        if (toRemove.isEmpty()) return
-        appointments.removeAll { it.id in toRemove }
+        addTombstone("appointment_series", seriesId)
+        val stoppedAt = tombstones.first { it.entity == "appointment_series" && it.entityId == seriesId }.deletedAt
+        val remaining = Recurrence.stopSeries(appointments.toList(), seriesId, stoppedAt)
+        val toRemove = appointments.map { it.id }.toSet() - remaining.map { it.id }.toSet()
+        appointments.clear(); appointments.addAll(remaining)
         toRemove.forEach { addTombstone("appointments", it) }
         repo.saveAppointments(appointments.toList())
         fireSync {
-            toRemove.forEach { repo.deleteAppointmentFromCloud(it) }
             repo.syncTombstonesToCloud(tombstones.toList())
         }
     }

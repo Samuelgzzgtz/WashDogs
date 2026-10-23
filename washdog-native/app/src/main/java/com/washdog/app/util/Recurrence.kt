@@ -1,6 +1,10 @@
 package com.washdog.app.util
 
 import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneId
+import com.washdog.app.data.models.Appointment
+import com.washdog.app.data.models.ApptStatus
 
 /**
  * Lógica pura de recurrencia de citas (sin dependencias de Android para poder
@@ -18,6 +22,22 @@ object Recurrence {
      * dispositivos materializan la misma serie sin conexión a la vez.
      */
     fun occurrenceId(seriesId: String, date: String): String = "$seriesId@$date"
+
+    /** Aplica también las cancelaciones persistidas mientras el dispositivo estaba sin conexión. */
+    fun stopSeries(current: List<Appointment>, seriesId: String, stoppedAt: String): List<Appointment> {
+        val stopDate = seriesStopDate(stoppedAt)
+        return current.mapNotNull { a ->
+            when {
+                a.seriesId != seriesId -> a
+                a.date >= stopDate && a.status != ApptStatus.DONE -> null
+                a.repeatEveryDays == null -> a
+                else -> a.copy(repeatEveryDays = null, updatedAt = maxOf(a.updatedAt, stoppedAt))
+            }
+        }
+    }
+
+    fun seriesStopDate(stoppedAt: String): String =
+        Instant.parse(stoppedAt).atZone(ZoneId.systemDefault()).toLocalDate().toString()
 
     /**
      * Fechas de la serie que caen en `(startDate, startDate + horizonDays]`.

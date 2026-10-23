@@ -1,12 +1,36 @@
 package com.washdog.app
 
 import com.washdog.app.util.Recurrence
+import com.washdog.app.data.models.Appointment
+import com.washdog.app.data.models.ApptStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 
 class RecurrenceTest {
+
+    @Test
+    fun stopped_series_preserves_completed_visits_and_survives_reloading_old_cloud_data() {
+        fun appointment(id: String, date: String, status: ApptStatus, series: String = "s1") = Appointment(
+            id = id, clientName = "Samuel", petName = "Luna", service = "Baño", time = "09:00",
+            date = date, status = status, repeatEveryDays = 7, seriesId = series
+        )
+        val stoppedAt = "2026-01-10T12:00:00Z"
+        val oldCloud = listOf(
+            appointment("past", "2026-01-01", ApptStatus.DONE),
+            appointment("pending", "2026-01-16", ApptStatus.SCHEDULED),
+            appointment("completed", "2026-01-31", ApptStatus.DONE),
+            appointment("other", "2026-01-16", ApptStatus.SCHEDULED, "s2")
+        )
+        val stopped = Recurrence.stopSeries(oldCloud, "s1", stoppedAt)
+        assertEquals(listOf("past", "completed", "other"), stopped.map { it.id })
+        assertTrue(stopped.filter { it.seriesId == "s1" }.all { it.repeatEveryDays == null })
+        assertEquals(7, stopped.last().repeatEveryDays)
+        assertEquals(stopped, Recurrence.stopSeries(stopped, "s1", stoppedAt))
+        val lateCloud = stopped + appointment("late", "2026-02-07", ApptStatus.SCHEDULED)
+        assertEquals(stopped, Recurrence.stopSeries(lateCloud, "s1", stoppedAt))
+    }
 
     @Test
     fun occurrences_every_15_days_excludes_start() {

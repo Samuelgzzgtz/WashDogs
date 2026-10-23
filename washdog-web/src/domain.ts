@@ -127,8 +127,13 @@ export function missingAppointments(
       .map((t) => t.entity_id),
   )
   const result: Appointment[] = []
-  for (const { template: base, stopped_at } of series) {
-    if (stopped_at) continue
+  const stoppedIds = new Set(
+    tombstones
+      .filter((t) => t.entity === 'appointment_series')
+      .map((t) => t.entity_id),
+  )
+  for (const { id, template: base, stopped_at } of series) {
+    if (stopped_at || stoppedIds.has(id)) continue
     for (const row of recurringAppointments(base, addDays(today, 90))) {
       if (
         row.date < today ||

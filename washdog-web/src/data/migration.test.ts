@@ -294,4 +294,80 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
       ).rows,
     ).toEqual([{ stopped: true }])
   })
+  it('renombrar no restaura una cita legacy todavía presente pero borrada por tombstone', async () => {
+    await createClient()
+    await createAppointment('ghost', '')
+    await db.query(
+      "insert into public.tombstones values ($1,'appointments','ghost','2026-10-23T12:00:00Z')",
+      [owner],
+    )
+    await db.exec(
+      "update public.clients set owner_name = 'Nuevo nombre' where id = 'c1'",
+    )
+    expect(
+      (
+        await db.query(
+          "select client_name,updated_at from public.appointments where id = 'ghost'",
+        )
+      ).rows,
+    ).toEqual([{ client_name: 'Samuel', updated_at: '' }])
+  })
+  it('el backfill omite citas borradas y conserva las reglas de citas activas', async () => {
+    await createClient()
+    await createAppointment('ghost', 'c1', '2026-10-23', 'deleted-series')
+    await createAppointment('active', 'c1', '2026-10-24', 'active-series')
+    await db.exec('delete from public.appointment_series')
+    await db.query(
+      "insert into public.tombstones values ($1,'appointments','ghost','2026-10-23T12:00:00Z')",
+      [owner],
+    )
+    await db.exec('reset role')
+    await db.exec(migration)
+    expect(
+      (await db.query('select id from public.appointment_series')).rows,
+    ).toEqual([{ id: 'active-series' }])
+  })
+  it('el backfill omite series de clientes borrados aunque la cita tenga una versión posterior', async () => {
+    await createClient()
+    await createAppointment('orphan', 'c1', '2026-10-23', 's1')
+    await db.exec(
+      "update public.appointments set updated_at = '2099-01-01T00:00:00Z'; delete from public.appointment_series",
+    )
+    await db.query(
+      "insert into public.tombstones values ($1,'clients','c1','2026-10-23T12:00:00Z')",
+      [owner],
+    )
+    await db.exec('reset role')
+    await db.exec(migration)
+    expect(
+      (await db.query('select * from public.appointment_series')).rows,
+    ).toEqual([])
+  })
+  it('el backfill respeta las cancelaciones de serie persistidas por Android', async () => {
+    await createClient()
+    await createAppointment('past', 'c1', '2026-10-23', 's1', 'DONE')
+    await db.exec('delete from public.appointment_series')
+    await db.query(
+      "insert into public.tombstones values ($1,'appointment_series','s1','2026-10-23T12:00:00Z')",
+      [owner],
+    )
+    await db.exec('reset role')
+    await db.exec(migration)
+    expect(
+      (await db.query('select * from public.appointment_series')).rows,
+    ).toEqual([])
+  })
+  it('un reintento Android no atrasa la fecha de borrado registrada por el servidor', async () => {
+    await db.query(
+      "insert into public.tombstones values ($1,'appointments','a1','2026-10-23T12:00:00Z')",
+      [owner],
+    )
+    await db.query(
+      "insert into public.tombstones values ($1,'appointments','a1','2026-10-22T12:00:00Z') on conflict (user_id,entity,entity_id) do update set deleted_at = excluded.deleted_at",
+      [owner],
+    )
+    expect(
+      (await db.query('select deleted_at from public.tombstones')).rows,
+    ).toEqual([{ deleted_at: '2026-10-23T12:00:00Z' }])
+  })
 })
