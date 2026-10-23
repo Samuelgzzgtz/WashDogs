@@ -92,7 +92,13 @@ export function useSave(uid: string) {
         throw new Error('Sin conexión. Reconéctate e inténtalo de nuevo.')
       await action()
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: ['washdog', uid] }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['washdog', uid] })
+    },
+    onError: (error) => {
+      if (error.message === 'WASHDOG_STALE')
+        void client.invalidateQueries({ queryKey: ['washdog', uid] })
+    },
   })
 }
 
@@ -101,8 +107,12 @@ export async function saveRow<
 >(table: T, row: Database['public']['Tables'][T]['Row']) {
   if (!supabase) throw new Error('La app no está conectada.')
   // Ownership is checked by RLS as well as the session-scoped queries.
-  const { error } = await supabase.from(table).upsert(row as never)
+  const { data, error } = await supabase
+    .from(table)
+    .upsert(row as never)
+    .select()
   if (error) throw error
+  if (!data?.length) throw new Error('WASHDOG_STALE')
 }
 
 export async function deleteRow(
@@ -129,6 +139,8 @@ export function errorMessage(error: unknown): string {
         : ''
   if (message.includes('WASHDOG_OVERLAP'))
     return 'Ese horario ya está ocupado. Elige otro horario.'
+  if (message.includes('WASHDOG_STALE'))
+    return 'El registro cambió o fue eliminado en otro dispositivo. Conservamos el formulario; revisa los datos e inténtalo de nuevo.'
   if (message.includes('Sin conexión')) return message
   return 'No se pudo guardar en la nube. Tus cambios siguen en el formulario; vuelve a intentarlo.'
 }

@@ -91,7 +91,8 @@ create or replace function public.washdog_record_deletion() returns trigger
 language plpgsql set search_path = '' as $$
 begin
   insert into public.tombstones(user_id, entity, entity_id, deleted_at)
-  values (old.user_id, tg_table_name, old.id, to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+  values (old.user_id, tg_table_name, old.id, coalesce(nullif(current_setting('washdog.deleted_at', true), ''),
+    to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
   on conflict (user_id, entity, entity_id) do update set deleted_at = excluded.deleted_at;
   return old;
 exception when foreign_key_violation then
@@ -144,13 +145,20 @@ end $$;
 
 create or replace function public.washdog_track_series() returns trigger
 language plpgsql set search_path = '' as $$
+declare existing boolean;
 begin
-  if new.series_id is null or new.repeat_every_days is null then return new; end if;
   perform pg_advisory_xact_lock(hashtextextended(new.user_id::text, 0));
+  select exists (select 1 from public.appointments where user_id = new.user_id and id = new.id) into existing;
+  if not existing and not exists (select 1 from public.clients c where c.user_id = new.user_id
+    and (c.id = new.client_id or (new.client_id = '' and c.owner_name = new.client_name and c.pet_name = new.pet_name))
+    and not public.washdog_is_deleted(c.user_id, 'clients', c.id, c.updated_at)) then return null; end if;
+  if new.series_id is null or new.repeat_every_days is null then return new; end if;
   if exists (select 1 from public.tombstones where user_id = new.user_id
-    and entity = 'appointment_series' and entity_id = new.series_id) then return null; end if;
-  if exists (select 1 from public.appointment_series where user_id = new.user_id and id = new.series_id and stopped_at <> '') then
-    return null;
+    and entity = 'appointment_series' and entity_id = new.series_id)
+    or exists (select 1 from public.appointment_series where user_id = new.user_id and id = new.series_id and stopped_at <> '') then
+    if not existing then return null; end if;
+    new.repeat_every_days = null;
+    return new;
   end if;
   insert into public.appointment_series(id, user_id, template) values (new.series_id, new.user_id, to_jsonb(new))
     on conflict (id) do nothing;
@@ -257,10 +265,13 @@ grant execute on function public.washdog_stop_series(text, text) to authenticate
 -- Replay an Android offline deletion without deleting a later, intentional client edit.
 create or replace function public.washdog_delete_client(p_id text, p_deleted_at text) returns void
 language plpgsql security invoker set search_path = '' as $$
+declare previous_deleted_at text := current_setting('washdog.deleted_at', true);
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
+  perform set_config('washdog.deleted_at', p_deleted_at, true);
   delete from public.clients where user_id = auth.uid() and id = p_id
     and coalesce(nullif(updated_at, '')::timestamptz, '-infinity'::timestamptz) <= p_deleted_at::timestamptz;
+  perform set_config('washdog.deleted_at', coalesce(previous_deleted_at, ''), true);
 end $$;
 revoke all on function public.washdog_delete_client(text, text) from public;
 grant execute on function public.washdog_delete_client(text, text) to authenticated;

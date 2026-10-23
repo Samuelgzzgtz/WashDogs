@@ -20,7 +20,7 @@ async function asUser(id: string) {
 }
 async function createClient(id = 'c1', user = owner) {
   await db.query(
-    'insert into public.clients(id,user_id,owner_name,pet_name,last_visit) values ($1,$2,$3,$4,$5)',
+    'insert into public.clients(id,user_id,owner_name,pet_name,last_visit) values ($1,$2,$3,$4,$5) on conflict (id) do nothing',
     [id, user, 'Samuel', id === 'c2' ? 'Toby' : 'Luna', '2026-09-01'],
   )
 }
@@ -60,6 +60,7 @@ beforeEach(async () => {
     `insert into auth.users values ('${owner}'), ('${other}') on conflict do nothing;`,
   )
   await asUser(owner)
+  await createClient()
 })
 afterAll(async () => {
   await db?.close()
@@ -104,10 +105,11 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
     ])
   })
   it('bloquea traslapes en servidor y permite horarios contiguos', async () => {
+    await createClient('c2')
     await createAppointment('a1')
     await expect(createAppointment('a2')).rejects.toThrow('WASHDOG_OVERLAP')
     await db.query(
-      "insert into public.appointments(id,user_id,client_name,pet_name,time,end_time,date) values ('a3',$1,'Otro','Toby','10:00','11:00','2026-10-23')",
+      "insert into public.appointments(id,user_id,client_name,pet_name,time,end_time,date) values ('a3',$1,'Samuel','Toby','10:00','11:00','2026-10-23')",
       [owner],
     )
     expect(
@@ -169,7 +171,8 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
     expect((await db.query('select * from public.appointments')).rows).toEqual(
       [],
     )
-    await createAppointment('new')
+    await createClient('c2')
+    await createAppointment('new', 'c2')
     expect((await db.query('select id from public.appointments')).rows).toEqual(
       [{ id: 'new' }],
     )
@@ -438,5 +441,73 @@ describe('migración PostgreSQL y seguridad por usuario', () => {
         )
       ).rows,
     ).toEqual([{ deleted: true }])
+  })
+  it('rechaza una serie creada offline que llega después del borrado de su cliente', async () => {
+    await db.exec("delete from public.clients where id = 'c1'")
+    await createAppointment('offline-new', 'c1', '2027-01-08', 'offline-series')
+    expect((await db.query('select * from public.appointments')).rows).toEqual(
+      [],
+    )
+    expect(
+      (await db.query('select * from public.appointment_series')).rows,
+    ).toEqual([])
+  })
+  it('conserva la fecha original del borrado offline y acepta una edición posterior todavía sin subir', async () => {
+    await db.query('select public.washdog_delete_client($1,$2)', [
+      'c1',
+      '2026-01-01T12:00:00Z',
+    ])
+    expect(
+      (
+        await db.query(
+          "select deleted_at from public.tombstones where entity = 'clients'",
+        )
+      ).rows,
+    ).toEqual([{ deleted_at: '2026-01-01T12:00:00Z' }])
+    await db.query(
+      "insert into public.clients(id,user_id,owner_name,pet_name,updated_at) values ('c1',$1,'Editado después','Luna','2026-01-02T12:00:00Z')",
+      [owner],
+    )
+    expect(
+      (await db.query("select owner_name from public.clients where id = 'c1'"))
+        .rows,
+    ).toEqual([{ owner_name: 'Editado después' }])
+  })
+  it('permite completar una cita histórica desde Android después de detener la serie', async () => {
+    await createAppointment('past', 'c1', '2026-01-01', 's1')
+    await db.query('select public.washdog_stop_series($1,$2)', [
+      's1',
+      '2026-10-23',
+    ])
+    await db.query(
+      "insert into public.appointments(id,user_id,client_id,client_name,pet_name,time,end_time,date,status,series_id,repeat_every_days,updated_at) values ('past',$1,'c1','Samuel','Luna','09:00','10:00','2026-01-01','DONE','s1',7,'2099-01-01T00:00:00Z') on conflict(id) do update set status=excluded.status, repeat_every_days=excluded.repeat_every_days, updated_at=excluded.updated_at",
+      [owner],
+    )
+    expect(
+      (
+        await db.query(
+          "select status,repeat_every_days from public.appointments where id = 'past'",
+        )
+      ).rows,
+    ).toEqual([{ status: 'DONE', repeat_every_days: null }])
+  })
+  it('una edición nueva de plantillas Android conserva su timestamp al reintentarse después de un cambio web', async () => {
+    await db.query(
+      "insert into public.user_settings values ($1,'Web','Confirmar','Visita','2026-01-01T12:00:00Z')",
+      [owner],
+    )
+    await db.query(
+      "insert into public.user_settings values ($1,'Android nuevo','Confirmar','Visita','2026-01-02T12:00:00Z') on conflict(user_id) do update set tpl_welcome=excluded.tpl_welcome,updated_at=excluded.updated_at",
+      [owner],
+    )
+    expect(
+      (
+        await db.query(
+          'select tpl_welcome,updated_at from public.user_settings',
+        )
+      ).rows,
+    ).toEqual([
+      { tpl_welcome: 'Android nuevo', updated_at: '2026-01-02T12:00:00Z' },
+    ])
   })
 })

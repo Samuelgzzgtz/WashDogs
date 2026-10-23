@@ -38,6 +38,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val appointments  = mutableStateListOf<Appointment>()
 
     var tplWelcome    by mutableStateOf(AppRepository.DEFAULT_WELCOME);    private set
+    private var templatesUpdatedAt = ""
     var tplConfirm    by mutableStateOf(AppRepository.DEFAULT_CONFIRM);    private set
     var tplReschedule by mutableStateOf(AppRepository.DEFAULT_RESCHEDULE); private set
 
@@ -123,7 +124,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val localTx   = repo.loadTransactions()
         val localCl   = repo.loadClients()
         val localAppt = repo.loadAppointments()
-        val (localW, localC, localR) = repo.loadTemplates()
+        val localSettings = repo.loadTemplates()
         val initialized = repo.isInitialized()
 
         val localTombstones = repo.loadTombstones()
@@ -158,10 +159,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             tombstoneMap("transactions"), { it.id }, { it.updatedAt }
         )
 
-        // Plantillas: la nube gana si existe, si no, lo local.
-        cloud?.settings?.let {
-            tplWelcome = it.tplWelcome; tplConfirm = it.tplConfirm; tplReschedule = it.tplReschedule
-        } ?: run { tplWelcome = localW; tplConfirm = localC; tplReschedule = localR }
+        val settings = if (localSettings.updatedAt.isEmpty()) cloud?.settings ?: localSettings else SyncMerge.mergeByUpdatedAt(
+            listOf(localSettings), listOfNotNull(cloud?.settings), { it.userId }, { it.updatedAt }
+        ).first()
+        tplWelcome = settings.tplWelcome; tplConfirm = settings.tplConfirm; tplReschedule = settings.tplReschedule
+        templatesUpdatedAt = settings.updatedAt
 
         val everythingEmpty = finalCl.isEmpty() && finalAppt.isEmpty() && finalTx.isEmpty()
 
@@ -180,7 +182,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         repo.saveTransactions(finalTx)
         repo.saveClients(finalCl)
         repo.saveAppointments(finalAppt)
-        repo.saveTemplates(tplWelcome, tplConfirm, tplReschedule)
+        repo.saveTemplates(tplWelcome, tplConfirm, tplReschedule, templatesUpdatedAt)
         repo.saveTombstones(allTombstones)
         repo.markInitialized()
 
@@ -197,7 +199,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 repo.syncClientsToCloud(clients.toList())
                 repo.syncAppointmentsToCloud(appointments.toList())
                 repo.syncTransactionsToCloud(transactions.toList())
-                repo.syncSettingsToCloud(tplWelcome, tplConfirm, tplReschedule)
+                repo.syncSettingsToCloud(tplWelcome, tplConfirm, tplReschedule, templatesUpdatedAt)
                 pendingSync = false; repo.setUnsynced(false)
             } catch (_: Exception) {
                 pendingSync = true; repo.setUnsynced(true)
@@ -293,8 +295,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         repo.saveClients(clients.toList())
         repo.saveAppointments(appointments.toList())
         fireSync {
-            repo.deleteClientFromCloud(clientId)
-            removedApptIds.forEach { repo.deleteAppointmentFromCloud(it) }
             repo.syncTombstonesToCloud(tombstones.toList())
         }
     }
@@ -402,8 +402,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateTemplates(welcome: String, confirm: String, reschedule: String) {
         tplWelcome = welcome; tplConfirm = confirm; tplReschedule = reschedule
-        repo.saveTemplates(welcome, confirm, reschedule)
-        fireSync { repo.syncSettingsToCloud(welcome, confirm, reschedule) }
+        val updatedAt = now()
+        templatesUpdatedAt = updatedAt
+        repo.saveTemplates(welcome, confirm, reschedule, updatedAt)
+        fireSync { repo.syncSettingsToCloud(welcome, confirm, reschedule, updatedAt) }
     }
 
     fun checkOverlap(candidate: Appointment) {

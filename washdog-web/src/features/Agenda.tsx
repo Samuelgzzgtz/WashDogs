@@ -402,10 +402,13 @@ function AppointmentForm({
             }
             save.mutate(
               async () => {
-                const { error } = await supabase!
+                const { data: saved, error } = await supabase!
                   .from('appointments')
                   .upsert(rows)
+                  .select('id')
                 if (error) throw error
+                if (saved?.length !== rows.length)
+                  throw new Error('WASHDOG_STALE')
               },
               { onSuccess: close },
             )
