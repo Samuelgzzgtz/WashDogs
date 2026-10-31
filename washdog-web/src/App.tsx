@@ -29,6 +29,7 @@ import {
 } from "./domain";
 import { Agenda } from "./features/Agenda";
 import { Clients } from "./features/Clients";
+import { Coins } from "./features/Coins";
 import { Goals } from "./features/Goals";
 import { Login } from "./features/Login";
 import { Balance, Reports, TransactionForm } from "./features/Reports";
@@ -257,6 +258,7 @@ function Dashboard({
       </div>
       <Balance data={data} month={today.slice(0, 7)} />
       <Goals data={data} uid={uid} />
+      <Coins data={data} uid={uid} />
       <div className="quick-actions">
         <button onClick={() => setType("IN")}>
           <ArrowDownLeft />

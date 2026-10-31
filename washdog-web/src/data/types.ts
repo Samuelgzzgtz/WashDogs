@@ -45,6 +45,13 @@ export type Goal = {
   deadline: string | null;
   updated_at: string;
 };
+export type CoinCount = {
+  id: string;
+  user_id: string;
+  denomination: number;
+  quantity: number;
+  updated_at: string;
+};
 export type Settings = {
   user_id: string;
   tpl_welcome: string;
@@ -77,6 +84,7 @@ export type Database = {
       appointments: Table<Appointment>;
       transactions: Table<Transaction>;
       goals: Table<Goal>;
+      coin_counts: Table<CoinCount>;
       user_settings: Table<Settings>;
       tombstones: Table<Tombstone>;
       appointment_series: Table<AppointmentSeries>;
@@ -97,6 +105,7 @@ export type Snapshot = {
   appointments: Appointment[];
   transactions: Transaction[];
   goals: Goal[];
+  coinCounts: CoinCount[];
   settings: Settings;
 };
 export const defaultSettings = (user_id: string): Settings => ({

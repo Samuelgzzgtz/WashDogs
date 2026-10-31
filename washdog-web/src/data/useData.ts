@@ -43,6 +43,7 @@ export async function loadSnapshot(uid: string): Promise<Snapshot> {
     appointments,
     transactions,
     goals,
+    coinCounts,
     settings,
     tombstones,
     series,
@@ -51,6 +52,7 @@ export async function loadSnapshot(uid: string): Promise<Snapshot> {
     loadRows("appointments", uid),
     loadRows("transactions", uid),
     loadRows("goals", uid),
+    loadRows("coin_counts", uid),
     loadRows("user_settings", uid),
     loadRows("tombstones", uid),
     loadRows("appointment_series", uid),
@@ -79,6 +81,7 @@ export async function loadSnapshot(uid: string): Promise<Snapshot> {
     appointments: visibleAppointments,
     transactions: visibleRows(transactions, tombstones, "transactions"),
     goals: visibleRows(goals, tombstones, "goals"),
+    coinCounts: visibleRows(coinCounts, tombstones, "coin_counts"),
     settings: settings[0] ?? defaultSettings(uid),
   };
 }
@@ -116,7 +119,12 @@ export function useSave(uid: string) {
 
 export async function saveRow<
   T extends
-    "clients" | "appointments" | "transactions" | "goals" | "user_settings",
+    | "clients"
+    | "appointments"
+    | "transactions"
+    | "goals"
+    | "coin_counts"
+    | "user_settings",
 >(table: T, row: Database["public"]["Tables"][T]["Row"]) {
   if (!supabase) throw new Error("La app no está conectada.");
   // Ownership is checked by RLS as well as the session-scoped queries.
@@ -129,7 +137,7 @@ export async function saveRow<
 }
 
 export async function deleteRow(
-  table: "clients" | "appointments" | "transactions" | "goals",
+  table: "clients" | "appointments" | "transactions" | "goals" | "coin_counts",
   id: string,
   uid: string,
 ) {

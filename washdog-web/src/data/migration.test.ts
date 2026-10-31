@@ -5,7 +5,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 const owner = "11111111-1111-4111-8111-111111111111";
 const other = "22222222-2222-4222-8222-222222222222";
 let db: PGlite;
-const migration = ["20261023000000_webapp.sql", "20261031000000_goals.sql"]
+const migration = [
+  "20261023000000_webapp.sql",
+  "20261031000000_goals.sql",
+  "20261031000100_coin_counts.sql",
+]
   .map((file) =>
     readFileSync(
       new URL(`../../../supabase/migrations/${file}`, import.meta.url),
@@ -57,7 +61,7 @@ beforeAll(async () => {
 }, 60_000);
 beforeEach(async () => {
   await db.exec(
-    "reset role; truncate public.clients, public.appointments, public.transactions, public.goals, public.tombstones, public.user_settings, public.appointment_series;",
+    "reset role; truncate public.clients, public.appointments, public.transactions, public.goals, public.coin_counts, public.tombstones, public.user_settings, public.appointment_series;",
   );
   await db.exec(
     `insert into auth.users values ('${owner}'), ('${other}') on conflict do nothing;`,
@@ -108,6 +112,40 @@ describe("migración PostgreSQL y seguridad por usuario", () => {
         )
       ).rows,
     ).toEqual([{ entity: "goals", entity_id: "g1" }]);
+  });
+  it("monedas: RLS, denominaciones válidas y una fila por usuario y denominación", async () => {
+    const insert = (
+      id: string,
+      user: string,
+      denomination: number,
+      quantity = 3,
+    ) =>
+      db.query(
+        "insert into public.coin_counts(id,user_id,denomination,quantity,updated_at) values ($1,$2,$3,$4,$5)",
+        [id, user, denomination, quantity, "2026-10-31T10:00:00.000Z"],
+      );
+    await insert("k1", owner, 0.5);
+    await expect(insert("k2", owner, 0.5)).rejects.toThrow(/unique|duplicate/);
+    await expect(insert("k3", owner, 3)).rejects.toThrow(/check/);
+    await expect(insert("k4", owner, 5, -1)).rejects.toThrow(/check/);
+    await expect(insert("k5", other, 5)).rejects.toThrow(/row-level security/);
+    await asUser(other);
+    expect((await db.query("select * from public.coin_counts")).rows).toEqual(
+      [],
+    );
+    await insert("k6", other, 0.5);
+    await asUser(owner);
+    expect(
+      (await db.query("select * from public.coin_counts")).rows,
+    ).toHaveLength(1);
+    await db.exec("delete from public.coin_counts where id = 'k1'");
+    expect(
+      (
+        await db.query(
+          "select entity_id from public.tombstones where entity = 'coin_counts'",
+        )
+      ).rows,
+    ).toEqual([{ entity_id: "k1" }]);
   });
   it("borra cliente y citas con tombstones atómicos y conserva otras mascotas del mismo dueño", async () => {
     await createClient();

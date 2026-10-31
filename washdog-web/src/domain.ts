@@ -2,6 +2,7 @@ import type {
   Appointment,
   AppointmentSeries,
   Client,
+  CoinCount,
   Tombstone,
   Transaction,
 } from "./data/types";
@@ -245,4 +246,32 @@ export function validateContribution(amount: number): string | null {
   return Number.isFinite(amount) && amount > 0
     ? null
     : "El abono debe ser mayor a cero.";
+}
+
+export const COIN_DENOMINATIONS = [0.5, 1, 2, 5, 10, 20] as const;
+export const MAX_COIN_QUANTITY = 1_000_000;
+export const coinRowId = (uid: string, denomination: number): string =>
+  `${uid}:${denomination}`;
+/** Devuelve un entero 0..MAX o null si el valor no es válido. Vacío cuenta 0. */
+export function parseCoinQuantity(value: string | number): number | null {
+  if (typeof value === "string" && value.trim() === "") return 0;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= MAX_COIN_QUANTITY ? n : null;
+}
+export function coinQuantities(rows: CoinCount[]): Record<number, number> {
+  const result: Record<number, number> = {};
+  for (const denomination of COIN_DENOMINATIONS) result[denomination] = 0;
+  for (const row of rows)
+    if (row.denomination in result) result[row.denomination] = row.quantity;
+  return result;
+}
+export function coinTotals(quantities: Record<number, number>) {
+  let count = 0;
+  let cents = 0;
+  for (const denomination of COIN_DENOMINATIONS) {
+    const quantity = quantities[denomination] ?? 0;
+    count += quantity;
+    cents += quantity * Math.round(denomination * 100);
+  }
+  return { count, sum: cents / 100 };
 }

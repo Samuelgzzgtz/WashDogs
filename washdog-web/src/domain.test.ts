@@ -3,10 +3,13 @@ import {
   addDays,
   appointmentClient,
   clientsToRemind,
+  coinQuantities,
+  coinTotals,
   findConflict,
   goalPercent,
   goalRemaining,
   missingAppointments,
+  parseCoinQuantity,
   recurringAppointments,
   totals,
   transactionsCsv,
@@ -270,5 +273,41 @@ describe("metas", () => {
     expect(validateContribution(0)).not.toBeNull();
     expect(validateContribution(NaN)).not.toBeNull();
     expect(validateContribution(50)).toBeNull();
+  });
+});
+
+describe("conteo de monedas", () => {
+  it("suma monedas y pesos sin errores de punto flotante", () => {
+    expect(coinTotals(coinQuantities([]))).toEqual({ count: 0, sum: 0 });
+    expect(coinTotals({ 0.5: 3, 1: 2, 2: 1, 5: 4, 10: 5, 20: 1 })).toEqual({
+      count: 16,
+      sum: 95.5,
+    });
+    expect(coinTotals({ 0.5: 1, 1: 0, 2: 0, 5: 0, 10: 0, 20: 0 }).sum).toBe(
+      0.5,
+    );
+    expect(coinTotals({ 0.5: 3 }).sum).toBe(1.5);
+  });
+  it("una denominación sin fila cuenta 0 e ignora denominaciones inválidas", () => {
+    const row = (denomination: number, quantity: number) => ({
+      id: String(denomination),
+      user_id: "u1",
+      denomination,
+      quantity,
+      updated_at: "",
+    });
+    const q = coinQuantities([row(5, 7), row(3, 9)]);
+    expect(q[5]).toBe(7);
+    expect(q[10]).toBe(0);
+    expect(3 in q).toBe(false);
+  });
+  it("valida cantidades enteras no negativas", () => {
+    expect(parseCoinQuantity("")).toBe(0);
+    expect(parseCoinQuantity("12")).toBe(12);
+    expect(parseCoinQuantity(0)).toBe(0);
+    expect(parseCoinQuantity("-1")).toBeNull();
+    expect(parseCoinQuantity("1.5")).toBeNull();
+    expect(parseCoinQuantity("abc")).toBeNull();
+    expect(parseCoinQuantity(2_000_000)).toBeNull();
   });
 });

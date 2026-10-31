@@ -1524,16 +1524,86 @@ small {
   }
 }
 
-.check-row {
+/* Conteo de monedas (Inicio) */
+.coins {
+  margin-bottom: 39px;
+}
+.coin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+.coin-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--warm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.coin-row > strong {
+  font-family: Manrope, sans-serif;
+  font-size: 17px;
+  color: var(--green);
+}
+.coin-row > small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.coin-stepper {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  gap: 6px;
+}
+.coin-stepper input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  text-align: center;
+  border-radius: 6px;
+}
+.coin-stepper .icon-button {
+  border: 1px solid #bdc6ba;
+}
+.coin-summary {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 4px 0 14px;
-  font-size: 0.95rem;
-  cursor: pointer;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px 20px;
+  border-radius: 10px;
+  background: var(--green);
+  color: #fff;
 }
-.check-row input {
-  width: 18px;
-  height: 18px;
-  flex: none;
+.coin-summary span {
+  font-size: 12px;
+  color: #d0dbcb;
+}
+.coin-summary strong {
+  display: block;
+  font-family: Manrope, sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+}
+.coin-summary .primary {
+  background: #fff;
+  color: var(--green);
+}
+.coin-summary .primary:disabled {
+  opacity: 0.5;
+}
+@media (max-width: 760px) {
+  .coins {
+    margin-bottom: 30px;
+  }
+  .coin-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .coin-summary .primary {
+    width: 100%;
+  }
 }
