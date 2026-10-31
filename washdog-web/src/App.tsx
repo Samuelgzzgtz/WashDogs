@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownLeft,
   ArrowRight,
@@ -13,43 +13,44 @@ import {
   Settings2,
   Users,
   Wallet,
-} from 'lucide-react'
-import type { Session } from '@supabase/supabase-js'
-import { AppUpdate, Brand, Empty, useOnline } from './components'
-import { supabase } from './data/supabase'
-import { useAuth } from './data/useAuth'
-import { useData } from './data/useData'
-import type { Snapshot } from './data/types'
+} from "lucide-react";
+import type { Session } from "@supabase/supabase-js";
+import { AppUpdate, Brand, Empty, useOnline } from "./components";
+import { supabase } from "./data/supabase";
+import { useAuth } from "./data/useAuth";
+import { useData } from "./data/useData";
+import type { Snapshot } from "./data/types";
 import {
   appointmentClient,
   clientsToRemind,
   isoDate,
   readableDate,
   whatsapp,
-} from './domain'
-import { Agenda } from './features/Agenda'
-import { Clients } from './features/Clients'
-import { Login } from './features/Login'
-import { Balance, Reports, TransactionForm } from './features/Reports'
-import { Settings } from './features/Settings'
+} from "./domain";
+import { Agenda } from "./features/Agenda";
+import { Clients } from "./features/Clients";
+import { Goals } from "./features/Goals";
+import { Login } from "./features/Login";
+import { Balance, Reports, TransactionForm } from "./features/Reports";
+import { Settings } from "./features/Settings";
 
 const navigation = [
-  ['inicio', 'Inicio', Home],
-  ['agenda', 'Agenda', CalendarDays],
-  ['clientes', 'Clientes', Users],
-  ['reportes', 'Cuentas', Wallet],
-  ['ajustes', 'Ajustes', Settings2],
-] as const
-type Page = (typeof navigation)[number][0]
+  ["inicio", "Inicio", Home],
+  ["agenda", "Agenda", CalendarDays],
+  ["clientes", "Clientes", Users],
+  ["reportes", "Cuentas", Wallet],
+  ["ajustes", "Ajustes", Settings2],
+] as const;
+type Page = (typeof navigation)[number][0];
 function currentPage(): Page {
   return (
     navigation.find(([id]) => window.location.hash.slice(1) === id)?.[0] ??
-    'inicio'
-  )
+    "inicio"
+  );
 }
 
 export function App() {
-  const { session, loading, error } = useAuth()
+  const { session, loading, error } = useAuth();
   return (
     <>
       {loading ? (
@@ -64,33 +65,33 @@ export function App() {
       )}
       <AppUpdate />
     </>
-  )
+  );
 }
 
 function Workspace({ session }: { session: Session }) {
-  const [page, setPage] = useState<Page>(currentPage)
-  const [newAppointment, setNewAppointment] = useState(false)
-  const online = useOnline()
-  const query = useData(session.user.id)
-  const queryClient = useQueryClient()
+  const [page, setPage] = useState<Page>(currentPage);
+  const [newAppointment, setNewAppointment] = useState(false);
+  const online = useOnline();
+  const query = useData(session.user.id);
+  const queryClient = useQueryClient();
   useEffect(() => {
     const update = () => {
-      setPage(currentPage())
-      if (currentPage() !== 'agenda') setNewAppointment(false)
-      window.scrollTo(0, 0)
-    }
-    window.addEventListener('hashchange', update)
-    return () => window.removeEventListener('hashchange', update)
-  }, [])
+      setPage(currentPage());
+      if (currentPage() !== "agenda") setNewAppointment(false);
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
   async function logout() {
-    const { error } = await supabase!.auth.signOut({ scope: 'local' })
-    if (error) throw error
-    queryClient.clear()
+    const { error } = await supabase!.auth.signOut({ scope: "local" });
+    if (error) throw error;
+    queryClient.clear();
   }
   function goAgenda() {
-    window.location.hash = 'agenda'
-    setPage('agenda')
-    setNewAppointment(true)
+    window.location.hash = "agenda";
+    setPage("agenda");
+    setNewAppointment(true);
   }
   return (
     <div className="workspace">
@@ -100,7 +101,7 @@ function Workspace({ session }: { session: Session }) {
           {navigation.map(([id, label, Icon]) => (
             <a
               href={`#${id}`}
-              aria-current={page === id ? 'page' : undefined}
+              aria-current={page === id ? "page" : undefined}
               key={id}
             >
               <Icon size={21} />
@@ -126,15 +127,15 @@ function Workspace({ session }: { session: Session }) {
           <div className="cloud-status">
             <Cloud size={16} />
             {!online
-              ? 'Sin conexión'
+              ? "Sin conexión"
               : query.isFetching
-                ? 'Actualizando…'
+                ? "Actualizando…"
                 : query.isError
-                  ? 'Error de conexión'
-                  : 'En la nube'}
+                  ? "Error de conexión"
+                  : "En la nube"}
           </div>
           <a className="account-avatar" href="#ajustes" aria-label="Tu cuenta">
-            {session.user.email?.slice(0, 1).toUpperCase() ?? 'W'}
+            {session.user.email?.slice(0, 1).toUpperCase() ?? "W"}
           </a>
         </header>
         {!online && (
@@ -163,30 +164,30 @@ function Workspace({ session }: { session: Session }) {
                   consulta; vuelve a intentarlo al recuperar la conexión.
                 </p>
               )}
-              {page === 'inicio' && (
+              {page === "inicio" && (
                 <Dashboard
                   data={query.data}
                   uid={session.user.id}
                   goAgenda={goAgenda}
                 />
               )}
-              {page === 'agenda' && (
+              {page === "agenda" && (
                 <Agenda
                   data={query.data}
                   uid={session.user.id}
                   initialNew={newAppointment}
                 />
               )}
-              {page === 'clientes' && (
+              {page === "clientes" && (
                 <Clients data={query.data} uid={session.user.id} />
               )}
-              {page === 'reportes' && (
+              {page === "reportes" && (
                 <Reports data={query.data} uid={session.user.id} />
               )}
-              {page === 'ajustes' && (
+              {page === "ajustes" && (
                 <Settings
                   settings={query.data.settings}
-                  email={session.user.email ?? ''}
+                  email={session.user.email ?? ""}
                   logout={logout}
                 />
               )}
@@ -201,7 +202,7 @@ function Workspace({ session }: { session: Session }) {
         {navigation.map(([id, label, Icon]) => (
           <a
             href={`#${id}`}
-            aria-current={page === id ? 'page' : undefined}
+            aria-current={page === id ? "page" : undefined}
             key={id}
           >
             <Icon size={22} />
@@ -210,7 +211,7 @@ function Workspace({ session }: { session: Session }) {
         ))}
       </nav>
     </div>
-  )
+  );
 }
 
 function Dashboard({
@@ -218,26 +219,26 @@ function Dashboard({
   uid,
   goAgenda,
 }: {
-  data: Snapshot
-  uid: string
-  goAgenda: () => void
+  data: Snapshot;
+  uid: string;
+  goAgenda: () => void;
 }) {
-  const [type, setType] = useState<'IN' | 'OUT' | null>(null)
-  const today = isoDate()
+  const [type, setType] = useState<"IN" | "OUT" | null>(null);
+  const today = isoDate();
   const appointments = data.appointments
     .filter((a) => a.date === today)
-    .sort((a, b) => a.time.localeCompare(b.time))
-  const pending = appointments.filter((a) => a.status !== 'DONE')
-  const reminders = clientsToRemind(data.clients, data.appointments)
+    .sort((a, b) => a.time.localeCompare(b.time));
+  const pending = appointments.filter((a) => a.status !== "DONE");
+  const reminders = clientsToRemind(data.clients, data.appointments);
   return (
     <>
       <div className="page-heading">
         <div>
           <p className="today-date">
-            {new Date().toLocaleDateString('es-MX', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
+            {new Date().toLocaleDateString("es-MX", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
             })}
           </p>
           <h1>
@@ -245,8 +246,8 @@ function Dashboard({
           </h1>
           <p>
             {pending.length
-              ? `${pending.length} ${pending.length === 1 ? 'colita te espera' : 'colitas te esperan'} hoy.`
-              : 'Tu día, con todo en su lugar.'}
+              ? `${pending.length} ${pending.length === 1 ? "colita te espera" : "colitas te esperan"} hoy.`
+              : "Tu día, con todo en su lugar."}
           </p>
         </div>
         <button className="primary" onClick={goAgenda}>
@@ -255,13 +256,14 @@ function Dashboard({
         </button>
       </div>
       <Balance data={data} month={today.slice(0, 7)} />
+      <Goals data={data} uid={uid} />
       <div className="quick-actions">
-        <button onClick={() => setType('IN')}>
+        <button onClick={() => setType("IN")}>
           <ArrowDownLeft />
           <span>Registrar ingreso</span>
           <ArrowRight size={17} />
         </button>
-        <button onClick={() => setType('OUT')}>
+        <button onClick={() => setType("OUT")}>
           <ArrowUpRight />
           <span>Registrar gasto</span>
           <ArrowRight size={17} />
@@ -276,7 +278,7 @@ function Dashboard({
         <section>
           <div className="section-heading">
             <h2>
-              Hoy en Washdog{' '}
+              Hoy en Washdog{" "}
               <span className="count">{appointments.length}</span>
             </h2>
             <a href="#agenda" className="text-button">
@@ -294,7 +296,7 @@ function Dashboard({
             </Empty>
           ) : (
             appointments.map((a) => {
-              const client = appointmentClient(a, data.clients)
+              const client = appointmentClient(a, data.clients);
               return (
                 <a href="#agenda" className="today-appointment" key={a.id}>
                   <span className="today-time">{a.time}</span>
@@ -304,12 +306,12 @@ function Dashboard({
                     <small>{client?.owner_name ?? a.client_name}</small>
                   </div>
                   <span
-                    className={`appointment-state ${a.status === 'DONE' ? 'done' : ''}`}
+                    className={`appointment-state ${a.status === "DONE" ? "done" : ""}`}
                   >
-                    {a.status === 'DONE' ? 'Lista' : 'Pendiente'}
+                    {a.status === "DONE" ? "Lista" : "Pendiente"}
                   </span>
                 </a>
-              )
+              );
             })
           )}
         </section>
@@ -329,7 +331,7 @@ function Dashboard({
                 client.phone,
                 data.settings.tpl_reschedule,
                 client.owner_name,
-              )
+              );
               return (
                 <div className="reminder-row" key={client.id}>
                   <div>
@@ -353,7 +355,7 @@ function Dashboard({
                     </a>
                   )}
                 </div>
-              )
+              );
             })
           )}
         </section>
@@ -362,5 +364,5 @@ function Dashboard({
         <TransactionForm uid={uid} type={type} close={() => setType(null)} />
       )}
     </>
-  )
+  );
 }
