@@ -1643,3 +1643,91 @@ small {
   font-size: 13px;
   color: #5b6b5f;
 }
+
+.balance-main > small.balance-note {
+  font-size: 12px;
+  color: #d0dbcb;
+  text-transform: none;
+}
+.cash-close {
+  margin: 28px 0 8px;
+}
+.cash-close-state {
+  color: #5b6b5f;
+  text-transform: capitalize;
+}
+.cash-close-sheet {
+  margin: 0;
+  border: 1px solid #cdd2c8;
+  border-radius: 10px;
+  background: #fff;
+}
+.cash-close-sheet > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e6e9e1;
+}
+.cash-close-sheet > div:last-child {
+  border-bottom: 0;
+}
+.cash-close-sheet dt {
+  font-size: 14px;
+}
+.cash-close-sheet dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+}
+.cash-close-sheet dd small {
+  display: block;
+  font-weight: 400;
+  font-size: 12px;
+  color: #5b6b5f;
+}
+.cash-close-sheet .cash-close-total {
+  background: #eef3ec;
+  border-radius: 0 0 10px 10px;
+}
+.cash-close-sheet .cash-close-total dd {
+  font-size: 18px;
+}
+.cash-close-sub {
+  margin: 22px 0 10px;
+  font-size: 14px;
+}
+.cash-close-list {
+  display: grid;
+  gap: 8px;
+}
+.cash-close-list button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  border: 1px solid #cdd2c8;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+}
+.cash-close-list button > span {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.cash-close-list button > small {
+  grid-column: 1;
+  color: #5b6b5f;
+}
+.cash-close-list button > strong {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.cash-close-list button[aria-pressed="true"] {
+  border-color: #708e79;
+  background: #eef3ec;
+}

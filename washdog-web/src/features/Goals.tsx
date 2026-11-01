@@ -4,7 +4,7 @@ import { Empty, Field, Modal, MoneyInput } from "../components";
 import { deleteRow, errorMessage, saveRow, useSave } from "../data/useData";
 import type { Goal, Snapshot } from "../data/types";
 import {
-  accountBalance,
+  cashBalance,
   goalContributionTransaction,
   goalPercent,
   goalRemaining,
@@ -252,7 +252,7 @@ function ContributionForm({
   const [txId] = useState(() => crypto.randomUUID());
   const save = useSave(uid);
   const month = isoDate().slice(0, 7);
-  const balance = accountBalance(data.transactions, month);
+  const balance = cashBalance(data.transactions, month);
   const value = roundMoney(Number(amount));
   const valid = validateContribution(value) === null;
   const after = roundMoney(balance - (valid ? value : 0));
@@ -307,15 +307,15 @@ function ContributionForm({
             {valid ? (
               <>
                 <strong>Se restarán {money(value)} de tu cuenta principal</strong>
-                Saldo del mes: {money(balance)} → {money(after)}
+                Caja total: {money(balance)} → {money(after)}
                 {after < 0 && ". Tu cuenta quedaría en negativo."}
                 <br />
                 Quedará registrado como gasto en Cuentas.
               </>
             ) : (
               <>
-                Lo que agregues se restará de tu cuenta principal. Saldo del
-                mes: {money(balance)}
+                Lo que agregues se restará de tu cuenta principal. Caja total:{" "}
+                {money(balance)}
               </>
             )}
           </p>

@@ -256,6 +256,66 @@ export function accountBalance(
   const { income, expense } = totals(transactions, month);
   return roundMoney(income - expense);
 }
+export const GOAL_CONTRIBUTION_PREFIX = "Aporte a meta:";
+const signedAmount = (tx: Transaction): number =>
+  tx.type === "IN" ? tx.amount : -tx.amount;
+/** Saldo con que arranca un mes: todo lo ingresado menos lo gastado en meses anteriores. */
+export function openingBalance(
+  transactions: Transaction[],
+  month: string,
+): number {
+  return roundMoney(
+    transactions
+      .filter((tx) => tx.date.slice(0, 7) < month)
+      .reduce((sum, tx) => sum + signedAmount(tx), 0),
+  );
+}
+/** Caja total al final del mes indicado: saldo anterior más el balance de ese mes. */
+export const cashBalance = (transactions: Transaction[], month: string): number =>
+  roundMoney(
+    openingBalance(transactions, month) + accountBalance(transactions, month),
+  );
+export type MonthClosing = {
+  month: string;
+  opening: number;
+  income: number;
+  expense: number;
+  goals: number;
+  closing: number;
+};
+export function monthClosing(
+  transactions: Transaction[],
+  month: string,
+): MonthClosing {
+  const { income, expense } = totals(transactions, month);
+  const goals = transactions
+    .filter(
+      (tx) =>
+        tx.type === "OUT" &&
+        tx.date.startsWith(month) &&
+        tx.concept.startsWith(GOAL_CONTRIBUTION_PREFIX),
+    )
+    .reduce((sum, tx) => sum + tx.amount, 0);
+  const opening = openingBalance(transactions, month);
+  return {
+    month,
+    opening,
+    income: roundMoney(income),
+    expense: roundMoney(expense),
+    goals: roundMoney(goals),
+    closing: roundMoney(opening + income - expense),
+  };
+}
+/** Cierres de los meses con movimientos hasta `until`, del más reciente al más antiguo. */
+export function monthClosings(
+  transactions: Transaction[],
+  until: string,
+): MonthClosing[] {
+  return [...new Set(transactions.map((tx) => tx.date.slice(0, 7)))]
+    .filter((month) => month <= until)
+    .sort((a, b) => b.localeCompare(a))
+    .map((month) => monthClosing(transactions, month));
+}
 /** Gasto que refleja un aporte a una meta, para restarlo de la cuenta principal. */
 export function goalContributionTransaction(input: {
   id: string;
@@ -271,7 +331,7 @@ export function goalContributionTransaction(input: {
     user_id: input.uid,
     type: "OUT",
     amount: roundMoney(input.amount),
-    concept: `Aporte a meta: ${input.goalName.trim()}`.slice(0, 160),
+    concept: `${GOAL_CONTRIBUTION_PREFIX} ${input.goalName.trim()}`.slice(0, 160),
     detail: "Aporte a meta · restado de la cuenta principal",
     date: `${isoDate(now)}T${time}`,
     updated_at: now.toISOString(),
