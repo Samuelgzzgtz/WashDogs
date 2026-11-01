@@ -6,6 +6,8 @@ import {
   coinQuantities,
   coinTotals,
   findConflict,
+  accountBalance,
+  goalContributionTransaction,
   goalPercent,
   goalRemaining,
   missingAppointments,
@@ -309,5 +311,47 @@ describe("conteo de monedas", () => {
     expect(parseCoinQuantity("1.5")).toBeNull();
     expect(parseCoinQuantity("abc")).toBeNull();
     expect(parseCoinQuantity(2_000_000)).toBeNull();
+  });
+});
+
+describe("aportes a metas y cuenta principal", () => {
+  const tx = (type: "IN" | "OUT", amount: number, date: string): Transaction => ({
+    id: `${type}${amount}${date}`,
+    user_id: "u",
+    type,
+    amount,
+    concept: "x",
+    detail: "",
+    date,
+    updated_at: "",
+  });
+  it("calcula el saldo del mes: ingresos menos gastos", () => {
+    const rows = [
+      tx("IN", 500.1, "2026-11-02T10:00"),
+      tx("OUT", 120.2, "2026-11-03T10:00"),
+      tx("IN", 999, "2026-10-30T10:00"),
+    ];
+    expect(accountBalance(rows, "2026-11")).toBe(379.9);
+    expect(accountBalance([], "2026-11")).toBe(0);
+  });
+  it("el aporte es un gasto etiquetado que resta del saldo", () => {
+    const expense = goalContributionTransaction({
+      id: "t1",
+      uid: "u",
+      goalName: "  Insumos ",
+      amount: 150.005,
+      now: new Date(2026, 10, 1, 9, 5),
+    });
+    expect(expense).toMatchObject({
+      id: "t1",
+      user_id: "u",
+      type: "OUT",
+      concept: "Aporte a meta: Insumos",
+      date: "2026-11-01T09:05",
+    });
+    expect(expense.amount).toBe(150.01);
+    expect(expense.detail).toContain("cuenta principal");
+    const before = [tx("IN", 1000, "2026-11-01T08:00")];
+    expect(accountBalance([...before, expense], "2026-11")).toBe(849.99);
   });
 });

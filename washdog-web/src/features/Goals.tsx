@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { PiggyBank, Plus, Pencil, Trash2 } from "lucide-react";
-import { Empty, Field, Modal } from "../components";
+import { Empty, Field, Modal, MoneyInput } from "../components";
 import { deleteRow, errorMessage, saveRow, useSave } from "../data/useData";
 import type { Goal, Snapshot } from "../data/types";
 import {
+  accountBalance,
+  goalContributionTransaction,
   goalPercent,
   goalRemaining,
   money,
+  isoDate,
   readableDate,
   roundMoney,
   validateContribution,
@@ -118,7 +121,12 @@ export function Goals({ data, uid }: { data: Snapshot; uid: string }) {
         <GoalForm uid={uid} goal={dialog.goal} close={close} />
       )}
       {dialog?.kind === "add" && (
-        <ContributionForm uid={uid} goal={dialog.goal} close={close} />
+        <ContributionForm
+          uid={uid}
+          goal={dialog.goal}
+          data={data}
+          close={close}
+        />
       )}
       {dialog?.kind === "delete" && (
         <DeleteGoal uid={uid} goal={dialog.goal} close={close} />
@@ -179,30 +187,28 @@ function GoalForm({
             />
           </Field>
           <Field label="Monto de la meta (MXN)">
-            <input
+            <MoneyInput
               name="target"
-              type="number"
-              inputMode="decimal"
               min="0.01"
               max="9999999"
-              step="0.01"
               required
               defaultValue={goal?.target_amount}
               placeholder="0.00"
             />
           </Field>
           <Field label="Lo que llevas (MXN)">
-            <input
+            <MoneyInput
               name="current"
-              type="number"
-              inputMode="decimal"
               min="0"
               max="9999999"
-              step="0.01"
               defaultValue={goal?.current_amount ?? 0}
               placeholder="0.00"
             />
           </Field>
+          <p className="field-hint">
+            Lo que llevas al crear la meta es un punto de partida y no se resta
+            de la cuenta principal. Solo los aportes con "Agregar $" se restan.
+          </p>
           <Field label="Fecha límite (opcional)">
             <input
               name="deadline"
@@ -232,14 +238,24 @@ function GoalForm({
 function ContributionForm({
   uid,
   goal,
+  data,
   close,
 }: {
   uid: string;
   goal: Goal;
+  data: Snapshot;
   close: () => void;
 }) {
+  const [amount, setAmount] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
+  // Mismo id al reintentar: el gasto se guarda una sola vez aunque falle la meta.
+  const [txId] = useState(() => crypto.randomUUID());
   const save = useSave(uid);
+  const month = isoDate().slice(0, 7);
+  const balance = accountBalance(data.transactions, month);
+  const value = roundMoney(Number(amount));
+  const valid = validateContribution(value) === null;
+  const after = roundMoney(balance - (valid ? value : 0));
   return (
     <Modal title="Agregar a la meta" close={close} busy={save.isPending}>
       <p>
@@ -248,34 +264,61 @@ function ContributionForm({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          const amount = roundMoney(
-            Number(new FormData(event.currentTarget).get("amount")),
-          );
-          const invalid = validateContribution(amount);
+          const invalid = validateContribution(value);
           setProblem(invalid);
           if (invalid) return;
           const row: Goal = {
             ...goal,
-            current_amount: roundMoney(goal.current_amount + amount),
+            current_amount: roundMoney(goal.current_amount + value),
             updated_at: new Date().toISOString(),
           };
-          save.mutate(() => saveRow("goals", row), { onSuccess: close });
+          const expense = goalContributionTransaction({
+            id: txId,
+            uid,
+            goalName: goal.name,
+            amount: value,
+          });
+          save.mutate(
+            async () => {
+              await saveRow("transactions", expense);
+              await saveRow("goals", row);
+            },
+            { onSuccess: close },
+          );
         }}
       >
         <fieldset disabled={save.isPending}>
           <Field label="Monto a sumar (MXN)">
-            <input
+            <MoneyInput
               name="amount"
-              type="number"
-              inputMode="decimal"
               min="0.01"
               max="9999999"
-              step="0.01"
               required
               autoFocus
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
               placeholder="0.00"
             />
           </Field>
+          <p
+            className={`goal-impact ${valid && after < 0 ? "negative" : ""}`}
+            role="status"
+          >
+            {valid ? (
+              <>
+                <strong>Se restarán {money(value)} de tu cuenta principal</strong>
+                Saldo del mes: {money(balance)} → {money(after)}
+                {after < 0 && ". Tu cuenta quedaría en negativo."}
+                <br />
+                Quedará registrado como gasto en Cuentas.
+              </>
+            ) : (
+              <>
+                Lo que agregues se restará de tu cuenta principal. Saldo del
+                mes: {money(balance)}
+              </>
+            )}
+          </p>
           {(problem || save.error) && (
             <p className="error" role="alert">
               {problem ?? errorMessage(save.error)}
@@ -286,7 +329,7 @@ function ContributionForm({
               Cancelar
             </button>
             <button className="primary" type="submit">
-              {save.isPending ? "Guardando…" : "Agregar"}
+              {save.isPending ? "Guardando…" : "Agregar y restar"}
             </button>
           </div>
         </fieldset>
