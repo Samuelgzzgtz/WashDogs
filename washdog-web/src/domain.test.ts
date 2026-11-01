@@ -7,6 +7,10 @@ import {
   coinTotals,
   findConflict,
   accountBalance,
+  cashBalance,
+  monthClosing,
+  monthClosings,
+  openingBalance,
   goalContributionTransaction,
   goalPercent,
   goalRemaining,
@@ -353,5 +357,65 @@ describe("aportes a metas y cuenta principal", () => {
     expect(expense.detail).toContain("cuenta principal");
     const before = [tx("IN", 1000, "2026-11-01T08:00")];
     expect(accountBalance([...before, expense], "2026-11")).toBe(849.99);
+  });
+});
+
+describe("cierre de caja y saldo arrastrado", () => {
+  const tx = (
+    type: "IN" | "OUT",
+    amount: number,
+    date: string,
+    concept = "x",
+  ): Transaction => ({
+    id: `${type}${amount}${date}${concept}`,
+    user_id: "u",
+    type,
+    amount,
+    concept,
+    detail: "",
+    date,
+    updated_at: "",
+  });
+  const rows = [
+    tx("IN", 1000, "2026-10-05T10:00"),
+    tx("OUT", 300, "2026-10-20T10:00"),
+    tx("IN", 500, "2026-11-02T10:00"),
+    tx("OUT", 100, "2026-11-03T10:00", "Aporte a meta: Insumos"),
+    tx("OUT", 50, "2026-11-04T10:00"),
+  ];
+  it("el saldo de octubre se arrastra a noviembre", () => {
+    expect(openingBalance(rows, "2026-10")).toBe(0);
+    expect(openingBalance(rows, "2026-11")).toBe(700);
+    expect(accountBalance(rows, "2026-11")).toBe(350);
+    expect(cashBalance(rows, "2026-11")).toBe(1050);
+    expect(cashBalance([], "2026-11")).toBe(0);
+  });
+  it("cierra el mes con saldo inicial, ingresos, gastos y aportes a metas", () => {
+    expect(monthClosing(rows, "2026-10")).toEqual({
+      month: "2026-10",
+      opening: 0,
+      income: 1000,
+      expense: 300,
+      goals: 0,
+      closing: 700,
+    });
+    expect(monthClosing(rows, "2026-11")).toEqual({
+      month: "2026-11",
+      opening: 700,
+      income: 500,
+      expense: 150,
+      goals: 100,
+      closing: 1050,
+    });
+  });
+  it("lista los meses con movimientos del más reciente al más antiguo", () => {
+    expect(monthClosings(rows, "2026-11").map((c) => c.month)).toEqual([
+      "2026-11",
+      "2026-10",
+    ]);
+    expect(monthClosings(rows, "2026-10").map((c) => c.month)).toEqual([
+      "2026-10",
+    ]);
+    expect(monthClosings([], "2026-11")).toEqual([]);
   });
 });

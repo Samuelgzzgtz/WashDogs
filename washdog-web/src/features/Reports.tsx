@@ -4,46 +4,131 @@ import { Empty, Field, Modal, MoneyInput } from '../components'
 import { deleteRow, errorMessage, saveRow, useSave } from '../data/useData'
 import type { Snapshot, Transaction } from '../data/types'
 import {
+  accountBalance,
   isoDate,
   money,
+  monthClosing,
+  monthClosings,
+  openingBalance,
   readableDate,
   services,
   totals,
   transactionsCsv,
 } from '../domain'
 
+const monthLabel = (month: string) =>
+  new Date(`${month}-01T12:00:00`).toLocaleDateString('es-MX', {
+    month: 'long',
+    year: 'numeric',
+  })
+
 export function Balance({ data, month }: { data: Snapshot; month: string }) {
   const { income, expense } = totals(data.transactions, month)
+  const opening = openingBalance(data.transactions, month)
+  const monthBalance = accountBalance(data.transactions, month)
+  const isCurrent = month === isoDate().slice(0, 7)
   return (
     <div className="balance">
       <div className="balance-main">
-        <span>Balance del mes</span>
-        <strong>{money(income - expense)}</strong>
-        <small>
-          MXN ·{' '}
-          {new Date(`${month}-01T12:00:00`).toLocaleDateString('es-MX', {
-            month: 'long',
-            year: 'numeric',
-          })}
+        <span>{isCurrent ? 'Caja total' : 'Caja al cierre del mes'}</span>
+        <strong>{money(opening + monthBalance)}</strong>
+        <small className="balance-note">
+          Saldo anterior {money(opening)} + este mes {money(monthBalance)}
         </small>
+        <small>MXN · {monthLabel(month)}</small>
       </div>
       <div className="balance-details">
         <div>
           <span>
             <ArrowDownLeft size={17} />
-            Ingresos
+            Ingresos del mes
           </span>
           <strong>{money(income)}</strong>
         </div>
         <div>
           <span>
             <ArrowUpRight size={17} />
-            Gastos
+            Gastos del mes
           </span>
           <strong>{money(expense)}</strong>
         </div>
       </div>
     </div>
+  )
+}
+
+function CashClose({
+  data,
+  month,
+  select,
+}: {
+  data: Snapshot
+  month: string
+  select: (month: string) => void
+}) {
+  const current = isoDate().slice(0, 7)
+  const close = monthClosing(data.transactions, month)
+  const previous = monthClosings(data.transactions, current).filter(
+    (item) => item.month < current,
+  )
+  return (
+    <section className="cash-close" aria-labelledby="cash-close-title">
+      <div className="section-heading">
+        <h2 id="cash-close-title">Cierre de caja</h2>
+        <small className="cash-close-state">
+          {monthLabel(month)} ·{' '}
+          {month === current
+            ? 'corte al día de hoy'
+            : month < current
+              ? 'mes cerrado'
+              : 'mes futuro'}
+        </small>
+      </div>
+      <dl className="cash-close-sheet">
+        <div>
+          <dt>Saldo inicial</dt>
+          <dd>{money(close.opening)}</dd>
+        </div>
+        <div>
+          <dt>+ Ingresos</dt>
+          <dd>{money(close.income)}</dd>
+        </div>
+        <div>
+          <dt>− Gastos</dt>
+          <dd>
+            {money(close.expense)}
+            {close.goals > 0 && (
+              <small>incluye {money(close.goals)} en aportes a metas</small>
+            )}
+          </dd>
+        </div>
+        <div className="cash-close-total">
+          <dt>= Saldo final</dt>
+          <dd>{money(close.closing)}</dd>
+        </div>
+      </dl>
+      {previous.length > 0 && (
+        <>
+          <h3 className="cash-close-sub">Cierres anteriores</h3>
+          <div className="cash-close-list">
+            {previous.map((item) => (
+              <button
+                type="button"
+                key={item.month}
+                aria-pressed={item.month === month}
+                onClick={() => select(item.month)}
+              >
+                <span>{monthLabel(item.month)}</span>
+                <small>
+                  Ingresos {money(item.income)} · Gastos {money(item.expense)}
+                </small>
+                <strong>{money(item.closing)}</strong>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
   )
 }
 
@@ -85,6 +170,7 @@ export function Reports({ data, uid }: { data: Snapshot; uid: string }) {
         />
       </div>
       <Balance data={data} month={month} />
+      <CashClose data={data} month={month} select={setMonth} />
       <div className="money-actions">
         <button className="primary" onClick={() => setType('IN')}>
           <ArrowDownLeft size={18} />
