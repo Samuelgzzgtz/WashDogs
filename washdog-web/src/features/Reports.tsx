@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowDownLeft, ArrowUpRight, Download, Trash2 } from 'lucide-react'
-import { Empty, Field, Modal } from '../components'
+import { Empty, Field, Modal, MoneyInput } from '../components'
 import { deleteRow, errorMessage, saveRow, useSave } from '../data/useData'
 import type { Snapshot, Transaction } from '../data/types'
 import {
@@ -238,8 +238,10 @@ export function TransactionForm({
                 <option value="" disabled>
                   Selecciona un servicio
                 </option>
-                {services.map(([name]) => (
-                  <option key={name}>{name}</option>
+                {services.map(([name, price]) => (
+                  <option key={name} value={name}>
+                    {name} · {money(price)}
+                  </option>
                 ))}
                 <option>Otro ingreso</option>
               </select>
@@ -256,13 +258,10 @@ export function TransactionForm({
             </Field>
           )}
           <Field label="Monto (MXN)">
-            <input
+            <MoneyInput
               name="amount"
-              type="number"
-              inputMode="decimal"
               min="0.01"
               max="9999999"
-              step="0.01"
               required
               value={amount}
               onChange={(event) => setAmount(event.target.value)}

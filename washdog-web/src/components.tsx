@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react'
 import { ArrowDownToLine, Check, Share2, X } from 'lucide-react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
@@ -27,6 +33,15 @@ export function Field({
       <span>{label}</span>
       {children}
     </label>
+  )
+}
+/** Campo numérico de dinero con el signo de pesos siempre visible. */
+export function MoneyInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <div className="money-input">
+      <span aria-hidden="true">$</span>
+      <input type="number" inputMode="decimal" step="0.01" {...props} />
+    </div>
   )
 }
 export function Modal({

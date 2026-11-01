@@ -1607,3 +1607,39 @@ small {
     width: 100%;
   }
 }
+
+.money-input {
+  position: relative;
+}
+.money-input > span {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: 600;
+  color: #5b6b5f;
+  pointer-events: none;
+}
+.money-input > input {
+  padding-left: 30px;
+}
+.goal-impact {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 7px;
+  background: #eef3ec;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.goal-impact strong {
+  display: block;
+}
+.goal-impact.negative {
+  background: #fbeceb;
+  color: #8a2b25;
+}
+.field-hint {
+  margin: -12px 0 20px;
+  font-size: 13px;
+  color: #5b6b5f;
+}

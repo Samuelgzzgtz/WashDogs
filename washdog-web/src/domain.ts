@@ -248,6 +248,36 @@ export function validateContribution(amount: number): string | null {
     : "El abono debe ser mayor a cero.";
 }
 
+/** Saldo de la cuenta principal en el mes: ingresos menos gastos. */
+export function accountBalance(
+  transactions: Transaction[],
+  month: string,
+): number {
+  const { income, expense } = totals(transactions, month);
+  return roundMoney(income - expense);
+}
+/** Gasto que refleja un aporte a una meta, para restarlo de la cuenta principal. */
+export function goalContributionTransaction(input: {
+  id: string;
+  uid: string;
+  goalName: string;
+  amount: number;
+  now?: Date;
+}): Transaction {
+  const now = input.now ?? new Date();
+  const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return {
+    id: input.id,
+    user_id: input.uid,
+    type: "OUT",
+    amount: roundMoney(input.amount),
+    concept: `Aporte a meta: ${input.goalName.trim()}`.slice(0, 160),
+    detail: "Aporte a meta · restado de la cuenta principal",
+    date: `${isoDate(now)}T${time}`,
+    updated_at: now.toISOString(),
+  };
+}
+
 export const COIN_DENOMINATIONS = [0.5, 1, 2, 5, 10, 20] as const;
 export const MAX_COIN_QUANTITY = 1_000_000;
 export const coinRowId = (uid: string, denomination: number): string =>
