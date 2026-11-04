@@ -8,6 +8,8 @@ export type Client = {
   needs_reschedule: boolean;
   pet_type: "DOG" | "CAT";
   phone: string;
+  address: string;
+  nervous: boolean;
   updated_at: string;
 };
 export type Appointment = {

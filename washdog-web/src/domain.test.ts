@@ -36,6 +36,8 @@ const client: Client = {
   needs_reschedule: false,
   pet_type: "DOG",
   phone: "8112345678",
+  address: "",
+  nervous: false,
   updated_at: "",
 };
 const appointment: Appointment = {

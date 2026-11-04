@@ -9,6 +9,7 @@ const migration = [
   "20261023000000_webapp.sql",
   "20261031000000_goals.sql",
   "20261031000100_coin_counts.sql",
+  "20261103000000_client_address_nervous.sql",
 ]
   .map((file) =>
     readFileSync(
@@ -618,5 +619,32 @@ describe("migración PostgreSQL y seguridad por usuario", () => {
     ).toEqual([
       { tpl_welcome: "Android nuevo", updated_at: "2026-01-02T12:00:00Z" },
     ]);
+  });
+  it("clientes: dirección y nervioso tienen valor por defecto y se guardan por usuario", async () => {
+    // El cliente creado sin esas columnas (como hace la app Android) queda con los valores por defecto.
+    expect(
+      (
+        await db.query(
+          "select address, nervous from public.clients where id = 'c1'",
+        )
+      ).rows,
+    ).toEqual([{ address: "", nervous: false }]);
+    await db.query(
+      "update public.clients set address = 'Av. Juárez 123', nervous = true where id = 'c1'",
+    );
+    // Un upsert de Android (sin esas columnas) no borra lo capturado en la web.
+    await db.query(
+      `insert into public.clients(id,user_id,owner_name,pet_name,last_visit,updated_at)
+       values ('c1',$1,'Samuel','Luna','2026-09-01','2999-01-01T00:00:00Z')
+       on conflict (id) do update set owner_name = excluded.owner_name, updated_at = excluded.updated_at`,
+      [owner],
+    );
+    expect(
+      (
+        await db.query(
+          "select address, nervous from public.clients where id = 'c1'",
+        )
+      ).rows,
+    ).toEqual([{ address: "Av. Juárez 123", nervous: true }]);
   });
 });
