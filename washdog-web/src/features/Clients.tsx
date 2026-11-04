@@ -22,7 +22,7 @@ export function Clients({ data, uid }: { data: Snapshot; uid: string }) {
   const clients = data.clients
     .filter((client) =>
       normalized(
-        `${client.owner_name} ${client.pet_name} ${client.breed} ${client.phone}`,
+        `${client.owner_name} ${client.pet_name} ${client.breed} ${client.phone} ${client.address ?? ''}`,
       ).includes(normalized(search)),
     )
     .sort((a, b) => a.owner_name.localeCompare(b.owner_name, 'es'))
@@ -66,8 +66,14 @@ export function Clients({ data, uid }: { data: Snapshot; uid: string }) {
                     {client.pet_type === 'CAT' ? 'Gato' : 'Perro'}
                     {client.breed && ` · ${client.breed}`}
                   </span>
+                  {client.nervous && (
+                    <span className="nervous-tag">Nervioso</span>
+                  )}
                 </h2>
                 <p>{client.owner_name}</p>
+                {client.address && (
+                  <p className="client-address">{client.address}</p>
+                )}
                 <small>
                   {client.last_visit
                     ? `Última visita: ${readableDate(client.last_visit)}`
@@ -190,6 +196,8 @@ function ClientForm({
   const [pet, setPet] = useState(client?.pet_name ?? '')
   const [breed, setBreed] = useState(client?.breed ?? '')
   const [phone, setPhone] = useState(client?.phone ?? '')
+  const [address, setAddress] = useState(client?.address ?? '')
+  const [nervous, setNervous] = useState(client?.nervous ?? false)
   const [type, setType] = useState<Client['pet_type']>(
     client?.pet_type ?? 'DOG',
   )
@@ -205,6 +213,9 @@ function ClientForm({
     if (found.pet_name) (setPet(found.pet_name), names.push('mascota'))
     if (found.breed) (setBreed(found.breed), names.push('raza'))
     if (found.phone) (setPhone(found.phone), names.push('teléfono'))
+    if (found.address) (setAddress(found.address), names.push('dirección'))
+    if (found.nervous !== undefined)
+      (setNervous(found.nervous), names.push('nervioso'))
     if (found.pet_type) setType(found.pet_type)
     setPasteNote(
       names.length
@@ -238,6 +249,8 @@ function ClientForm({
             pet_name: pet.trim(),
             breed: breed.trim(),
             phone: phone.trim(),
+            address: address.trim(),
+            nervous,
             pet_type: type,
             last_visit: String(form.get('visit')),
             needs_reschedule: client?.needs_reschedule ?? false,
@@ -328,6 +341,24 @@ function ClientForm({
               pattern="[+0-9 ()\-]{10,25}"
             />
           </Field>
+          <Field label="Dirección">
+            <input
+              name="address"
+              autoComplete="street-address"
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              maxLength={300}
+            />
+          </Field>
+          <label className="check-row">
+            <input
+              name="nervous"
+              type="checkbox"
+              checked={nervous}
+              onChange={(event) => setNervous(event.target.checked)}
+            />
+            <span>Es nervioso</span>
+          </label>
           <Field label="Última visita">
             <input
               name="visit"

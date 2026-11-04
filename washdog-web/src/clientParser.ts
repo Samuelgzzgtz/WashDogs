@@ -7,9 +7,18 @@ export type ParsedClient = {
   breed?: string;
   phone?: string;
   pet_type?: Client["pet_type"];
+  address?: string;
+  nervous?: boolean;
 };
 
-type Field = "owner_name" | "pet_name" | "breed" | "phone" | "pet_type";
+type Field =
+  | "owner_name"
+  | "pet_name"
+  | "breed"
+  | "phone"
+  | "pet_type"
+  | "address"
+  | "nervous";
 
 const WORD = "[\\p{L}][\\p{L}'’\\-]*";
 const PHONE_CANDIDATE = /\+?\d[\d\s().\-]{8,}\d/g;
@@ -56,6 +65,15 @@ function petTypeIn(text: string): Client["pet_type"] | undefined {
   return undefined;
 }
 
+/** true si la respuesta dice que sí es nervioso, false si dice que no, undefined si no se entiende. */
+function nervousAnswer(value: string): boolean | undefined {
+  const v = normalized(value).replace(/[^a-z ]/g, " ").trim();
+  if (/^(no|nada|nunca|tranquil)/.test(v)) return false;
+  if (/^(si|yes|claro|un poco|poco|algo|medio|mucho|muy|bastante|regular|a veces|nervios)/.test(v))
+    return true;
+  return undefined;
+}
+
 function classify(label: string): Field | null {
   const l = normalized(label)
     .replace(/[^a-z0-9 ]/g, " ")
@@ -63,6 +81,11 @@ function classify(label: string): Field | null {
     .trim();
   if (!l) return null;
   if (/\braza\b/.test(l)) return "breed";
+  // Antes que mascota/teléfono: "¿Es nervioso tu perrito?" y "Dirección (calle y número)" los mencionan.
+  if (/\b(nervioso|nerviosa|nerviosito|nerviosita|nerviosismo)\b/.test(l))
+    return "nervous";
+  if (/\b(direccion|domicilio|ubicacion|calle|colonia|dir)\b/.test(l))
+    return "address";
   if (/\b(tipo|especie)\b/.test(l)) return "pet_type";
   if (
     /\b(mascota|perro|perra|perrito|perrita|gato|gata|gatito|gatita|peludo|peludito|animalito|animal|cachorro|cachorra)\b/.test(
@@ -114,7 +137,12 @@ export function parseClientMessage(message: string): ParsedClient {
   let labelled = 0;
 
   for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(/^(.{1,45}?)\s*[:：]\s*(.*)$/);
+    let match = lines[i].match(/^(.{1,60}?)\s*[:：]\s*(.*)$/);
+    if (!match) {
+      // "¿Es nervioso? Sí": la respuesta va pegada a la pregunta, sin dos puntos.
+      const question = lines[i].match(/^¿?(.{1,60}?)\?\s*(.+)$/);
+      if (question && classify(question[1]) === "nervous") match = question;
+    }
     if (!match) continue;
     const field = classify(match[1]);
     if (!field) continue;
@@ -129,6 +157,22 @@ export function parseClientMessage(message: string): ParsedClient {
     } else if (field === "pet_type") {
       const type = petTypeIn(value);
       if (type && !result.pet_type) result.pet_type = type;
+    } else if (field === "nervous") {
+      const answer = nervousAnswer(value);
+      if (answer !== undefined && result.nervous === undefined)
+        result.nervous = answer;
+    } else if (field === "address") {
+      // La dirección suele venir en varias líneas: se juntan las que siguen sin etiqueta.
+      const parts = [value];
+      while (
+        parts.length < 3 &&
+        i + 1 < lines.length &&
+        !/[:：?¿]/.test(lines[i + 1]) &&
+        !findPhone(lines[i + 1])
+      )
+        parts.push(lines[++i]);
+      if (!result.address)
+        result.address = parts.join(", ").replace(/\s+/g, " ").trim();
     } else if (!result[field]) {
       result[field] = tidyName(value);
     }
@@ -187,6 +231,6 @@ export function parseClientMessage(message: string): ParsedClient {
   }
 
   for (const key of Object.keys(result) as Field[])
-    if (!result[key]) delete result[key];
+    if (result[key] === undefined || result[key] === "") delete result[key];
   return result;
 }

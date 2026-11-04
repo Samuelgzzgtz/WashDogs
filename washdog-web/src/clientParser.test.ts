@@ -105,4 +105,52 @@ describe("parseClientMessage", () => {
     );
     expect(parseClientMessage("")).toEqual({});
   });
+
+  it("lee dirección y si es nervioso del formato que se le manda al cliente", () => {
+    const parsed = parseClientMessage(
+      "Tu nombre: Ana Torres\nNombre de tu perrito: Lola\nTeléfono: 81 1234 5678\nDirección: Av. Juárez 123, Col. Centro\n¿Es nervioso? (sí / no): Sí",
+    );
+    expect(parsed).toEqual({
+      owner_name: "Ana Torres",
+      pet_name: "Lola",
+      phone: "8112345678",
+      address: "Av. Juárez 123, Col. Centro",
+      nervous: true,
+      pet_type: "DOG",
+    });
+  });
+
+  it("no confunde la pregunta de nervioso con el nombre de la mascota", () => {
+    const parsed = parseClientMessage(
+      "Tu nombre: Ana Torres\n¿Es nervioso tu perrito? No\nNombre de tu perrito: Lola",
+    );
+    expect(parsed.pet_name).toBe("Lola");
+    expect(parsed.nervous).toBe(false);
+  });
+
+  it("entiende respuestas de nervioso con matices", () => {
+    const nervous = (answer: string) =>
+      parseClientMessage(`¿Es nervioso?: ${answer}`).nervous;
+    expect(nervous("un poco")).toBe(true);
+    expect(nervous("Sí, bastante")).toBe(true);
+    expect(nervous("No, es muy tranquilo")).toBe(false);
+    expect(nervous("no mucho")).toBe(false);
+    expect(nervous("depende")).toBeUndefined();
+  });
+
+  it("junta una dirección escrita en varias líneas y no toma el número como teléfono", () => {
+    const parsed = parseClientMessage(
+      "Nombre: Luis\nPerrito: Max\nDirección: Calle 5 de Mayo 4512\nCol. Roble\nSan Nicolás\nTeléfono: 8112345678",
+    );
+    expect(parsed.address).toBe("Calle 5 de Mayo 4512, Col. Roble, San Nicolás");
+    expect(parsed.phone).toBe("8112345678");
+  });
+
+  it("no toma 'número' de la dirección como etiqueta de teléfono", () => {
+    const parsed = parseClientMessage(
+      "Dirección (calle y número): Olmos 22, Col. Roble\nTeléfono: 81 2222 3333",
+    );
+    expect(parsed.address).toBe("Olmos 22, Col. Roble");
+    expect(parsed.phone).toBe("8122223333");
+  });
 });

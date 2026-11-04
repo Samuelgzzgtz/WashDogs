@@ -1748,3 +1748,26 @@ small {
 .paste-box .field-hint {
   margin: 10px 0 8px;
 }
+.client-info h2 .nervous-tag {
+  background: #fbeceb;
+  color: #8a2b25;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 600;
+}
+.client-info .client-address {
+  color: var(--muted);
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.check-row input {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
