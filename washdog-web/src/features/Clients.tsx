@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  ClipboardPaste,
   MessageCircle,
   Pencil,
   Phone,
@@ -10,6 +11,7 @@ import {
 import type { Client, Snapshot } from '../data/types'
 import { deleteRow, errorMessage, saveRow, useSave } from '../data/useData'
 import { Empty, Field, Modal } from '../components'
+import { parseClientMessage } from '../clientParser'
 import { isoDate, normalized, readableDate, whatsapp } from '../domain'
 
 export function Clients({ data, uid }: { data: Snapshot; uid: string }) {
@@ -184,6 +186,41 @@ function ClientForm({
 }) {
   const save = useSave(uid)
   const [id] = useState(() => client?.id ?? crypto.randomUUID())
+  const [owner, setOwner] = useState(client?.owner_name ?? '')
+  const [pet, setPet] = useState(client?.pet_name ?? '')
+  const [breed, setBreed] = useState(client?.breed ?? '')
+  const [phone, setPhone] = useState(client?.phone ?? '')
+  const [type, setType] = useState<Client['pet_type']>(
+    client?.pet_type ?? 'DOG',
+  )
+  const [message, setMessage] = useState('')
+  const [pasteNote, setPasteNote] = useState('')
+
+  const fillFrom = (text: string) => {
+    setMessage(text)
+    if (!text.trim()) return setPasteNote('')
+    const found = parseClientMessage(text)
+    const names: string[] = []
+    if (found.owner_name) (setOwner(found.owner_name), names.push('persona'))
+    if (found.pet_name) (setPet(found.pet_name), names.push('mascota'))
+    if (found.breed) (setBreed(found.breed), names.push('raza'))
+    if (found.phone) (setPhone(found.phone), names.push('teléfono'))
+    if (found.pet_type) setType(found.pet_type)
+    setPasteNote(
+      names.length
+        ? `Se llenó: ${names.join(', ')}. Revisa los datos antes de guardar.`
+        : 'No encontré datos en ese mensaje. Prueba con "Nombre:", "Mascota:" y "Teléfono:".',
+    )
+  }
+  const pasteFromClipboard = async () => {
+    try {
+      fillFrom(await navigator.clipboard.readText())
+    } catch {
+      setPasteNote(
+        'No pude leer el portapapeles. Pega el mensaje en el cuadro de arriba.',
+      )
+    }
+  }
   return (
     <Modal
       title={client ? 'Editar cliente' : 'Un nuevo compañero'}
@@ -197,11 +234,11 @@ function ClientForm({
           const row: Client = {
             id,
             user_id: uid,
-            owner_name: String(form.get('owner')).trim(),
-            pet_name: String(form.get('pet')).trim(),
-            breed: String(form.get('breed')).trim(),
-            phone: String(form.get('phone')).trim(),
-            pet_type: form.get('type') as Client['pet_type'],
+            owner_name: owner.trim(),
+            pet_name: pet.trim(),
+            breed: breed.trim(),
+            phone: phone.trim(),
+            pet_type: type,
             last_visit: String(form.get('visit')),
             needs_reschedule: client?.needs_reschedule ?? false,
             updated_at: new Date().toISOString(),
@@ -211,10 +248,37 @@ function ClientForm({
         }}
       >
         <fieldset disabled={save.isPending}>
+          {!client && (
+            <div className="paste-box">
+              <Field label="Mensaje de WhatsApp">
+                <textarea
+                  aria-label="Mensaje de WhatsApp"
+                  rows={4}
+                  placeholder="Pega aquí el mensaje con los datos del cliente"
+                  value={message}
+                  onChange={(event) => fillFrom(event.target.value)}
+                />
+              </Field>
+              <button
+                className="secondary"
+                type="button"
+                onClick={pasteFromClipboard}
+              >
+                <ClipboardPaste size={17} />
+                Pegar del portapapeles
+              </button>
+              {pasteNote && (
+                <p className="field-hint" role="status">
+                  {pasteNote}
+                </p>
+              )}
+            </div>
+          )}
           <Field label="Nombre de la persona">
             <input
               name="owner"
-              defaultValue={client?.owner_name}
+              value={owner}
+              onChange={(event) => setOwner(event.target.value)}
               autoComplete="name"
               required
               maxLength={120}
@@ -225,21 +289,33 @@ function ClientForm({
             <Field label="Nombre de la mascota">
               <input
                 name="pet"
-                defaultValue={client?.pet_name}
+                value={pet}
+                onChange={(event) => setPet(event.target.value)}
                 required
                 maxLength={120}
                 pattern=".*\S.*"
               />
             </Field>
             <Field label="Tipo">
-              <select name="type" defaultValue={client?.pet_type ?? 'DOG'}>
+              <select
+                name="type"
+                value={type}
+                onChange={(event) =>
+                  setType(event.target.value as Client['pet_type'])
+                }
+              >
                 <option value="DOG">Perro</option>
                 <option value="CAT">Gato</option>
               </select>
             </Field>
           </div>
           <Field label="Raza">
-            <input name="breed" defaultValue={client?.breed} maxLength={120} />
+            <input
+              name="breed"
+              value={breed}
+              onChange={(event) => setBreed(event.target.value)}
+              maxLength={120}
+            />
           </Field>
           <Field label="Teléfono / WhatsApp">
             <input
@@ -247,7 +323,8 @@ function ClientForm({
               type="tel"
               autoComplete="tel"
               placeholder="10 dígitos o código internacional"
-              defaultValue={client?.phone}
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
               pattern="[+0-9 ()\-]{10,25}"
             />
           </Field>

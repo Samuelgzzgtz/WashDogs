@@ -1731,3 +1731,20 @@ small {
   border-color: #708e79;
   background: #eef3ec;
 }
+.paste-box {
+  background: #e7efe9;
+  border-radius: 12px;
+  padding: 16px 16px 8px;
+  margin-bottom: 22px;
+}
+.paste-box .field {
+  margin-bottom: 12px;
+}
+.paste-box .secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.paste-box .field-hint {
+  margin: 10px 0 8px;
+}
