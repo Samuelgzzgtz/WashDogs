@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Empty, Field, Modal } from '../components'
+import { WeekSchedule } from './WeekSchedule'
 import type { Appointment, Snapshot } from '../data/types'
 import { deleteRow, errorMessage, saveRow, useSave } from '../data/useData'
 import { supabase } from '../data/supabase'
@@ -137,6 +138,10 @@ export function Agenda({
   initialNew?: boolean
 }) {
   const [date, setDate] = useState(isoDate())
+  const [view, setView] = useState<'semana' | 'dia'>('semana')
+  const [preset, setPreset] = useState<{ time: string; end: string } | null>(
+    null,
+  )
   const [editing, setEditing] = useState<Appointment | 'new' | null>(
     initialNew ? 'new' : null,
   )
@@ -159,93 +164,144 @@ export function Agenda({
           <h1>Agenda</h1>
           <p>Un espacio para cada colita.</p>
         </div>
-        <button className="primary" onClick={() => setEditing('new')}>
+        <button
+          className="primary"
+          onClick={() => {
+            setPreset(null)
+            setEditing('new')
+          }}
+        >
           <Plus size={18} />
           Nueva cita
         </button>
       </div>
-      <div className="date-toolbar">
+      <div className="view-toggle" role="group" aria-label="Vista de la agenda">
         <button
-          className="icon-button"
-          aria-label="Semana anterior"
-          onClick={() => setDate(addDays(date, -7))}
+          type="button"
+          aria-pressed={view === 'semana'}
+          onClick={() => setView('semana')}
         >
-          <ChevronLeft />
+          Semana
         </button>
-        <input
-          aria-label="Fecha de la agenda"
-          type="date"
-          value={date}
-          onChange={(event) => {
-            if (event.target.value) setDate(event.target.value)
+        <button
+          type="button"
+          aria-pressed={view === 'dia'}
+          onClick={() => setView('dia')}
+        >
+          Día
+        </button>
+      </div>
+      {view === 'semana' && (
+        <WeekSchedule
+          wide
+          appointments={data.appointments}
+          clients={data.clients}
+          date={date}
+          onDateChange={setDate}
+          onPick={({ date: day, slot }) => {
+            setDate(day)
+            setPreset({ time: slot.time, end: slot.end })
+            setEditing('new')
+          }}
+          onOpen={(a) => {
+            setDate(a.date)
+            setView('dia')
           }}
         />
-        <button
-          className="icon-button"
-          aria-label="Semana siguiente"
-          onClick={() => setDate(addDays(date, 7))}
-        >
-          <ChevronRight />
-        </button>
-        <button className="text-button" onClick={() => setDate(isoDate())}>
-          Hoy
-        </button>
-      </div>
-      <div className="week-strip">
-        {Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).map(
-          (day) => (
+      )}
+      {view === 'dia' && (
+        <>
+          <div className="date-toolbar">
             <button
-              aria-pressed={day === date}
-              key={day}
-              onClick={() => setDate(day)}
+              className="icon-button"
+              aria-label="Semana anterior"
+              onClick={() => setDate(addDays(date, -7))}
             >
-              <span>
-                {new Date(`${day}T12:00:00`).toLocaleDateString('es-MX', {
-                  weekday: 'short',
-                })}
-              </span>
-              <strong>{Number(day.slice(-2))}</strong>
-              <span className="day-count">
-                {data.appointments.filter((a) => a.date === day).length || '·'}
-              </span>
+              <ChevronLeft />
             </button>
-          ),
-        )}
-      </div>
-      <div className="section-heading">
-        <h2>{readableDate(date)}</h2>
-        <span>{dayAppointments.length} citas</span>
-      </div>
-      <AppointmentList
-        appointments={dayAppointments}
-        data={data}
-        onEdit={setEditing}
-        onDelete={(a) => {
-          save.reset()
-          setAction({ a, type: 'delete' })
-        }}
-        onComplete={(a) => {
-          save.reset()
-          setAction({ a, type: 'complete' })
-        }}
-        onStop={(a) => {
-          save.reset()
-          setAction({ a, type: 'stop' })
-        }}
-      />
-      {!dayAppointments.length && (
-        <Empty>
-          Un día con espacio para algo bueno.
-          <button className="text-button" onClick={() => setEditing('new')}>
-            Agendar una cita
-          </button>
-        </Empty>
+            <input
+              aria-label="Fecha de la agenda"
+              type="date"
+              value={date}
+              onChange={(event) => {
+                if (event.target.value) setDate(event.target.value)
+              }}
+            />
+            <button
+              className="icon-button"
+              aria-label="Semana siguiente"
+              onClick={() => setDate(addDays(date, 7))}
+            >
+              <ChevronRight />
+            </button>
+            <button className="text-button" onClick={() => setDate(isoDate())}>
+              Hoy
+            </button>
+          </div>
+          <div className="week-strip">
+            {Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).map(
+              (day) => (
+                <button
+                  aria-pressed={day === date}
+                  key={day}
+                  onClick={() => setDate(day)}
+                >
+                  <span>
+                    {new Date(`${day}T12:00:00`).toLocaleDateString('es-MX', {
+                      weekday: 'short',
+                    })}
+                  </span>
+                  <strong>{Number(day.slice(-2))}</strong>
+                  <span className="day-count">
+                    {data.appointments.filter((a) => a.date === day).length || '·'}
+                  </span>
+                </button>
+              ),
+            )}
+          </div>
+          <div className="section-heading">
+            <h2>{readableDate(date)}</h2>
+            <span>{dayAppointments.length} citas</span>
+          </div>
+          <AppointmentList
+            appointments={dayAppointments}
+            data={data}
+            onEdit={setEditing}
+            onDelete={(a) => {
+              save.reset()
+              setAction({ a, type: 'delete' })
+            }}
+            onComplete={(a) => {
+              save.reset()
+              setAction({ a, type: 'complete' })
+            }}
+            onStop={(a) => {
+              save.reset()
+              setAction({ a, type: 'stop' })
+            }}
+          />
+          {!dayAppointments.length && (
+            <Empty>
+              Un día con espacio para algo bueno.
+              <button
+                className="text-button"
+                onClick={() => {
+                  setPreset(null)
+                  setEditing('new')
+                }}
+              >
+                Agendar una cita
+              </button>
+            </Empty>
+          )}
+        </>
       )}
       {editing && (
         <AppointmentForm
           data={data}
           uid={uid}
           date={date}
+          preset={preset}
           appointment={editing === 'new' ? undefined : editing}
           close={() => setEditing(null)}
         />
@@ -328,12 +384,14 @@ function AppointmentForm({
   data,
   uid,
   date,
+  preset,
   appointment,
   close,
 }: {
   data: Snapshot
   uid: string
   date: string
+  preset?: { time: string; end: string } | null
   appointment?: Appointment
   close: () => void
 }) {
@@ -472,7 +530,7 @@ function AppointmentForm({
                 type="time"
                 name="time"
                 required
-                defaultValue={appointment?.time ?? '09:00'}
+                defaultValue={appointment?.time ?? preset?.time ?? '09:00'}
               />
             </Field>
             <Field label="Salida">
@@ -480,7 +538,7 @@ function AppointmentForm({
                 type="time"
                 name="end"
                 required
-                defaultValue={appointment?.end_time || '10:00'}
+                defaultValue={appointment?.end_time || preset?.end || '10:00'}
               />
             </Field>
           </div>

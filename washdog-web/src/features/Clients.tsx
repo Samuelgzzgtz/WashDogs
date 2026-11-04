@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   ClipboardPaste,
   MessageCircle,
@@ -8,7 +8,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import type { Client, Snapshot } from '../data/types'
+import type { Appointment, Client, Snapshot } from '../data/types'
 import { deleteRow, errorMessage, saveRow, useSave } from '../data/useData'
 import { Empty, Field, Modal } from '../components'
 import {
@@ -16,7 +16,15 @@ import {
   findDuplicateClient,
   parseClientMessage,
 } from '../clientParser'
-import { isoDate, normalized, readableDate, whatsapp } from '../domain'
+import {
+  findConflict,
+  isoDate,
+  normalized,
+  readableDate,
+  whatsapp,
+} from '../domain'
+import { appointmentForSlot, slotLabel } from '../schedule'
+import { WeekSchedule, type PickedSlot } from './WeekSchedule'
 
 export function Clients({ data, uid }: { data: Snapshot; uid: string }) {
   const [search, setSearch] = useState('')
@@ -141,6 +149,7 @@ export function Clients({ data, uid }: { data: Snapshot; uid: string }) {
         <ClientForm
           client={editing === 'new' ? undefined : editing}
           clients={data.clients}
+          appointments={data.appointments}
           uid={uid}
           close={() => setEditing(null)}
         />
@@ -189,16 +198,19 @@ export function Clients({ data, uid }: { data: Snapshot; uid: string }) {
 function ClientForm({
   client,
   clients,
+  appointments,
   uid,
   close,
 }: {
   client?: Client
   clients: Client[]
+  appointments: Appointment[]
   uid: string
   close: () => void
 }) {
   const save = useSave(uid)
   const [id] = useState(() => client?.id ?? crypto.randomUUID())
+  const [appointmentId] = useState(() => crypto.randomUUID())
   const [owner, setOwner] = useState(client?.owner_name ?? '')
   const [pet, setPet] = useState(client?.pet_name ?? '')
   const [breed, setBreed] = useState(client?.breed ?? '')
@@ -210,48 +222,62 @@ function ClientForm({
   )
   const [message, setMessage] = useState('')
   const [note, setNote] = useState('')
-  // Un cliente nuevo se crea solo pegando el mensaje; los campos aparecen únicamente
-  // al editar o si el mensaje no trae lo mínimo (persona y mascota).
+  const [slot, setSlot] = useState<PickedSlot | null>(null)
+  const [weekDate, setWeekDate] = useState(isoDate())
+  // Un cliente nuevo se crea pegando el mensaje; los campos aparecen solo al editar
+  // o si el usuario decide corregir o completar los datos a mano.
   const [manual, setManual] = useState(Boolean(client))
 
-  const addFromMessage = (text: string) => {
-    setMessage(text)
-    save.reset()
-    if (!text.trim()) return setNote('Pega primero el mensaje del cliente.')
-    const found = parseClientMessage(text)
-    const row = clientFromParsed(found, uid, id)
-    if (!row) {
-      setOwner(found.owner_name ?? '')
-      setPet(found.pet_name ?? '')
-      setBreed(found.breed ?? '')
-      setPhone(found.phone ?? '')
-      setAddress(found.address ?? '')
-      setNervous(found.nervous ?? false)
-      setType(found.pet_type ?? 'DOG')
-      setManual(true)
-      setNote(
-        found.owner_name || found.pet_name
-          ? `No encontré ${found.owner_name ? 'el nombre de la mascota' : 'el nombre de la persona'}. Complétalo y guarda.`
-          : 'No encontré el nombre de la persona ni de la mascota. Escríbelos y guarda.',
-      )
-      return
-    }
-    const duplicate = findDuplicateClient(clients, row)
-    if (duplicate) {
-      return setNote(
-        `${duplicate.pet_name} de ${duplicate.owner_name} ya está en tus clientes.`,
-      )
-    }
-    setNote('')
-    save.mutate(() => saveRow('clients', row), { onSuccess: close })
+  const found = useMemo(() => parseClientMessage(message), [message])
+  const fromMessage = manual || client ? null : clientFromParsed(found, uid, id)
+  const duplicate = fromMessage
+    ? findDuplicateClient(clients, fromMessage)
+    : undefined
+  const ready = fromMessage && !duplicate ? fromMessage : null
+
+  const editByHand = () => {
+    setOwner(found.owner_name ?? '')
+    setPet(found.pet_name ?? '')
+    setBreed(found.breed ?? '')
+    setPhone(found.phone ?? '')
+    setAddress(found.address ?? '')
+    setNervous(found.nervous ?? false)
+    setType(found.pet_type ?? 'DOG')
+    setManual(true)
   }
   const pasteFromClipboard = async () => {
     try {
-      addFromMessage(await navigator.clipboard.readText())
+      setMessage(await navigator.clipboard.readText())
+      setNote('')
     } catch {
       setNote('No pude leer el portapapeles. Pega el mensaje en el cuadro.')
     }
   }
+  const saveClient = (row: Client) => {
+    setNote('')
+    const appointment = slot
+      ? appointmentForSlot(row, slot, uid, appointmentId)
+      : null
+    if (appointment && findConflict(appointment, appointments))
+      return setNote('Ese horario ya se ocupó. Elige otro.')
+    save.mutate(
+      async () => {
+        await saveRow('clients', row)
+        if (appointment) await saveRow('appointments', appointment)
+      },
+      { onSuccess: close },
+    )
+  }
+  const hasData = Boolean(ready) || (manual && !client)
+  const summary = ready
+    ? [
+        ready.pet_type === 'CAT' ? 'Gato' : 'Perro',
+        ready.breed,
+        ready.phone,
+        ready.address,
+        ready.nervous && 'Nervioso',
+      ].filter(Boolean)
+    : []
   return (
     <Modal
       title={client ? 'Editar cliente' : 'Un nuevo compañero'}
@@ -261,7 +287,9 @@ function ClientForm({
       <form
         onSubmit={(event) => {
           event.preventDefault()
-          if (!manual) return addFromMessage(message)
+          save.reset()
+          if (ready) return saveClient(ready)
+          if (!manual) return
           const form = new FormData(event.currentTarget)
           const row: Client = {
             id,
@@ -279,11 +307,12 @@ function ClientForm({
           }
           if (!row.owner_name || !row.pet_name) return
           if (!client) {
-            const duplicate = findDuplicateClient(clients, row)
-            if (duplicate)
+            const same = findDuplicateClient(clients, row)
+            if (same)
               return setNote(
-                `${duplicate.pet_name} de ${duplicate.owner_name} ya está en tus clientes.`,
+                `${same.pet_name} de ${same.owner_name} ya está en tus clientes.`,
               )
+            return saveClient(row)
           }
           save.mutate(() => saveRow('clients', row), { onSuccess: close })
         }}
@@ -294,15 +323,11 @@ function ClientForm({
               <Field label="Mensaje de WhatsApp">
                 <textarea
                   aria-label="Mensaje de WhatsApp"
-                  rows={manual ? 4 : 7}
+                  rows={manual || ready ? 3 : 7}
                   autoFocus
-                  placeholder="Pega aquí el mensaje con los datos del cliente y se guarda solo"
+                  placeholder="Pega aquí el mensaje con los datos del cliente"
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
-                  onPaste={(event) => {
-                    event.preventDefault()
-                    addFromMessage(event.clipboardData.getData('text'))
-                  }}
                 />
               </Field>
               <button
@@ -313,9 +338,37 @@ function ClientForm({
                 <ClipboardPaste size={17} />
                 Pegar del portapapeles
               </button>
-              {note && (
+              {ready && (
+                <p className="paste-summary" role="status">
+                  <strong>
+                    {ready.pet_name} · {ready.owner_name}
+                  </strong>
+                  <span>{summary.join(' · ')}</span>
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={editByHand}
+                  >
+                    Corregir datos
+                  </button>
+                </p>
+              )}
+              {duplicate && (
                 <p className="field-hint" role="status">
-                  {note}
+                  {duplicate.pet_name} de {duplicate.owner_name} ya está en tus
+                  clientes.
+                </p>
+              )}
+              {message.trim() && !fromMessage && !manual && (
+                <p className="field-hint" role="status">
+                  No encontré el nombre de la persona y de la mascota.{' '}
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={editByHand}
+                  >
+                    Completar a mano
+                  </button>
                 </p>
               )}
             </div>
@@ -404,9 +457,34 @@ function ClientForm({
               </Field>
             </>
           )}
-          {save.error && (
+          {!client && hasData && (
+            <div className="slot-picker">
+              <h3>Horario</h3>
+              <p className="muted">
+                {slot
+                  ? `${new Date(`${slot.date}T12:00:00`).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })} · ${slotLabel(slot.slot.time)}`
+                  : 'Elige un horario para agendarlo, o guarda sin horario.'}
+              </p>
+              <WeekSchedule
+                appointments={appointments}
+                clients={clients}
+                date={weekDate}
+                onDateChange={setWeekDate}
+                selected={slot}
+                onPick={(picked) =>
+                  setSlot((current) =>
+                    current?.date === picked.date &&
+                    current.slot.time === picked.slot.time
+                      ? null
+                      : picked,
+                  )
+                }
+              />
+            </div>
+          )}
+          {(note || save.error) && (
             <p className="error" role="alert">
-              {errorMessage(save.error)}
+              {note || errorMessage(save.error)}
             </p>
           )}
           <div className="form-actions">
@@ -416,9 +494,13 @@ function ClientForm({
             <button
               className="primary"
               type="submit"
-              disabled={!manual && !message.trim()}
+              disabled={!client && !hasData}
             >
-              {save.isPending ? 'Guardando…' : 'Guardar cliente'}
+              {save.isPending
+                ? 'Guardando…'
+                : !client && slot
+                  ? 'Guardar y agendar'
+                  : 'Guardar cliente'}
             </button>
           </div>
         </fieldset>
