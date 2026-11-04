@@ -234,3 +234,41 @@ export function parseClientMessage(message: string): ParsedClient {
     if (result[key] === undefined || result[key] === "") delete result[key];
   return result;
 }
+
+/**
+ * Arma el cliente listo para guardar a partir de lo extraído del mensaje.
+ * Devuelve null si falta el nombre de la persona o el de la mascota, que son obligatorios.
+ */
+export function clientFromParsed(
+  parsed: ParsedClient,
+  uid: string,
+  id: string,
+  now = new Date(),
+): Client | null {
+  if (!parsed.owner_name || !parsed.pet_name) return null;
+  return {
+    id,
+    user_id: uid,
+    owner_name: parsed.owner_name.slice(0, 120),
+    pet_name: parsed.pet_name.slice(0, 120),
+    breed: (parsed.breed ?? "").slice(0, 120),
+    phone: parsed.phone ?? "",
+    address: (parsed.address ?? "").slice(0, 300),
+    nervous: parsed.nervous ?? false,
+    pet_type: parsed.pet_type ?? "DOG",
+    last_visit: "",
+    needs_reschedule: false,
+    updated_at: now.toISOString(),
+  };
+}
+
+/** Cliente que ya existe con la misma persona y mascota (sin importar mayúsculas ni acentos). */
+export function findDuplicateClient(
+  clients: Client[],
+  candidate: Pick<Client, "owner_name" | "pet_name">,
+): Client | undefined {
+  const key = (c: Pick<Client, "owner_name" | "pet_name">) =>
+    normalized(`${c.owner_name}|${c.pet_name}`).replace(/\s+/g, " ").trim();
+  const wanted = key(candidate);
+  return clients.find((client) => key(client) === wanted);
+}

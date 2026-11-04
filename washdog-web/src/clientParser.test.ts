@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { normalizePhone, parseClientMessage } from "./clientParser";
+import {
+  clientFromParsed,
+  findDuplicateClient,
+  normalizePhone,
+  parseClientMessage,
+} from "./clientParser";
+import type { Client } from "./data/types";
 
 describe("normalizePhone", () => {
   it("deja 10 dígitos de México sin lada del país", () => {
@@ -152,5 +158,92 @@ describe("parseClientMessage", () => {
     );
     expect(parsed.address).toBe("Olmos 22, Col. Roble");
     expect(parsed.phone).toBe("8122223333");
+  });
+});
+
+describe("clientFromParsed", () => {
+  const now = new Date("2026-11-03T12:00:00Z");
+  it("arma el cliente con valores por defecto para lo que no venía", () => {
+    expect(
+      clientFromParsed(
+        parseClientMessage("Nombre: Ana Torres\nMascota: Lola"),
+        "u1",
+        "id1",
+        now,
+      ),
+    ).toEqual({
+      id: "id1",
+      user_id: "u1",
+      owner_name: "Ana Torres",
+      pet_name: "Lola",
+      breed: "",
+      phone: "",
+      address: "",
+      nervous: false,
+      pet_type: "DOG",
+      last_visit: "",
+      needs_reschedule: false,
+      updated_at: "2026-11-03T12:00:00.000Z",
+    });
+  });
+  it("incluye dirección, teléfono y nervioso cuando vienen", () => {
+    const row = clientFromParsed(
+      parseClientMessage(
+        "Tu nombre: Ana Torres\nNombre de tu perrito: Lola\nTeléfono: 81 1234 5678\nDirección: Av. Juárez 123\n¿Es nervioso?: sí",
+      ),
+      "u1",
+      "id1",
+      now,
+    );
+    expect(row).toMatchObject({
+      phone: "8112345678",
+      address: "Av. Juárez 123",
+      nervous: true,
+      pet_type: "DOG",
+    });
+  });
+  it("devuelve null si falta la persona o la mascota", () => {
+    expect(clientFromParsed({ pet_name: "Lola" }, "u1", "id1")).toBeNull();
+    expect(clientFromParsed({ owner_name: "Ana" }, "u1", "id1")).toBeNull();
+    expect(clientFromParsed({}, "u1", "id1")).toBeNull();
+  });
+  it("recorta textos demasiado largos al límite del formulario", () => {
+    const row = clientFromParsed(
+      { owner_name: "a".repeat(300), pet_name: "Lola", address: "b".repeat(500) },
+      "u1",
+      "id1",
+    );
+    expect(row?.owner_name).toHaveLength(120);
+    expect(row?.address).toHaveLength(300);
+  });
+});
+
+describe("findDuplicateClient", () => {
+  const existing = {
+    id: "c1",
+    owner_name: "Ana Torres",
+    pet_name: "Lola",
+  } as Client;
+  it("encuentra al mismo cliente aunque cambien mayúsculas, acentos o espacios", () => {
+    expect(
+      findDuplicateClient([existing], {
+        owner_name: "ANA  TORRES",
+        pet_name: "lola",
+      }),
+    ).toBe(existing);
+    expect(
+      findDuplicateClient([{ ...existing, owner_name: "José Pérez" }], {
+        owner_name: "Jose Perez",
+        pet_name: "Lola",
+      }),
+    ).toBeDefined();
+  });
+  it("no marca como duplicado a otra mascota de la misma persona", () => {
+    expect(
+      findDuplicateClient([existing], {
+        owner_name: "Ana Torres",
+        pet_name: "Toby",
+      }),
+    ).toBeUndefined();
   });
 });

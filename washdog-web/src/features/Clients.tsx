@@ -11,7 +11,11 @@ import {
 import type { Client, Snapshot } from '../data/types'
 import { deleteRow, errorMessage, saveRow, useSave } from '../data/useData'
 import { Empty, Field, Modal } from '../components'
-import { parseClientMessage } from '../clientParser'
+import {
+  clientFromParsed,
+  findDuplicateClient,
+  parseClientMessage,
+} from '../clientParser'
 import { isoDate, normalized, readableDate, whatsapp } from '../domain'
 
 export function Clients({ data, uid }: { data: Snapshot; uid: string }) {
@@ -136,6 +140,7 @@ export function Clients({ data, uid }: { data: Snapshot; uid: string }) {
       {editing && (
         <ClientForm
           client={editing === 'new' ? undefined : editing}
+          clients={data.clients}
           uid={uid}
           close={() => setEditing(null)}
         />
@@ -183,10 +188,12 @@ export function Clients({ data, uid }: { data: Snapshot; uid: string }) {
 
 function ClientForm({
   client,
+  clients,
   uid,
   close,
 }: {
   client?: Client
+  clients: Client[]
   uid: string
   close: () => void
 }) {
@@ -202,34 +209,47 @@ function ClientForm({
     client?.pet_type ?? 'DOG',
   )
   const [message, setMessage] = useState('')
-  const [pasteNote, setPasteNote] = useState('')
+  const [note, setNote] = useState('')
+  // Un cliente nuevo se crea solo pegando el mensaje; los campos aparecen únicamente
+  // al editar o si el mensaje no trae lo mínimo (persona y mascota).
+  const [manual, setManual] = useState(Boolean(client))
 
-  const fillFrom = (text: string) => {
+  const addFromMessage = (text: string) => {
     setMessage(text)
-    if (!text.trim()) return setPasteNote('')
+    save.reset()
+    if (!text.trim()) return setNote('Pega primero el mensaje del cliente.')
     const found = parseClientMessage(text)
-    const names: string[] = []
-    if (found.owner_name) (setOwner(found.owner_name), names.push('persona'))
-    if (found.pet_name) (setPet(found.pet_name), names.push('mascota'))
-    if (found.breed) (setBreed(found.breed), names.push('raza'))
-    if (found.phone) (setPhone(found.phone), names.push('teléfono'))
-    if (found.address) (setAddress(found.address), names.push('dirección'))
-    if (found.nervous !== undefined)
-      (setNervous(found.nervous), names.push('nervioso'))
-    if (found.pet_type) setType(found.pet_type)
-    setPasteNote(
-      names.length
-        ? `Se llenó: ${names.join(', ')}. Revisa los datos antes de guardar.`
-        : 'No encontré datos en ese mensaje. Prueba con "Nombre:", "Mascota:" y "Teléfono:".',
-    )
+    const row = clientFromParsed(found, uid, id)
+    if (!row) {
+      setOwner(found.owner_name ?? '')
+      setPet(found.pet_name ?? '')
+      setBreed(found.breed ?? '')
+      setPhone(found.phone ?? '')
+      setAddress(found.address ?? '')
+      setNervous(found.nervous ?? false)
+      setType(found.pet_type ?? 'DOG')
+      setManual(true)
+      setNote(
+        found.owner_name || found.pet_name
+          ? `No encontré ${found.owner_name ? 'el nombre de la mascota' : 'el nombre de la persona'}. Complétalo y guarda.`
+          : 'No encontré el nombre de la persona ni de la mascota. Escríbelos y guarda.',
+      )
+      return
+    }
+    const duplicate = findDuplicateClient(clients, row)
+    if (duplicate) {
+      return setNote(
+        `${duplicate.pet_name} de ${duplicate.owner_name} ya está en tus clientes.`,
+      )
+    }
+    setNote('')
+    save.mutate(() => saveRow('clients', row), { onSuccess: close })
   }
   const pasteFromClipboard = async () => {
     try {
-      fillFrom(await navigator.clipboard.readText())
+      addFromMessage(await navigator.clipboard.readText())
     } catch {
-      setPasteNote(
-        'No pude leer el portapapeles. Pega el mensaje en el cuadro de arriba.',
-      )
+      setNote('No pude leer el portapapeles. Pega el mensaje en el cuadro.')
     }
   }
   return (
@@ -241,6 +261,7 @@ function ClientForm({
       <form
         onSubmit={(event) => {
           event.preventDefault()
+          if (!manual) return addFromMessage(message)
           const form = new FormData(event.currentTarget)
           const row: Client = {
             id,
@@ -252,11 +273,18 @@ function ClientForm({
             address: address.trim(),
             nervous,
             pet_type: type,
-            last_visit: String(form.get('visit')),
+            last_visit: String(form.get('visit') ?? ''),
             needs_reschedule: client?.needs_reschedule ?? false,
             updated_at: new Date().toISOString(),
           }
           if (!row.owner_name || !row.pet_name) return
+          if (!client) {
+            const duplicate = findDuplicateClient(clients, row)
+            if (duplicate)
+              return setNote(
+                `${duplicate.pet_name} de ${duplicate.owner_name} ya está en tus clientes.`,
+              )
+          }
           save.mutate(() => saveRow('clients', row), { onSuccess: close })
         }}
       >
@@ -266,10 +294,15 @@ function ClientForm({
               <Field label="Mensaje de WhatsApp">
                 <textarea
                   aria-label="Mensaje de WhatsApp"
-                  rows={4}
-                  placeholder="Pega aquí el mensaje con los datos del cliente"
+                  rows={manual ? 4 : 7}
+                  autoFocus
+                  placeholder="Pega aquí el mensaje con los datos del cliente y se guarda solo"
                   value={message}
-                  onChange={(event) => fillFrom(event.target.value)}
+                  onChange={(event) => setMessage(event.target.value)}
+                  onPaste={(event) => {
+                    event.preventDefault()
+                    addFromMessage(event.clipboardData.getData('text'))
+                  }}
                 />
               </Field>
               <button
@@ -280,93 +313,97 @@ function ClientForm({
                 <ClipboardPaste size={17} />
                 Pegar del portapapeles
               </button>
-              {pasteNote && (
+              {note && (
                 <p className="field-hint" role="status">
-                  {pasteNote}
+                  {note}
                 </p>
               )}
             </div>
           )}
-          <Field label="Nombre de la persona">
-            <input
-              name="owner"
-              value={owner}
-              onChange={(event) => setOwner(event.target.value)}
-              autoComplete="name"
-              required
-              maxLength={120}
-              pattern=".*\S.*"
-            />
-          </Field>
-          <div className="form-grid">
-            <Field label="Nombre de la mascota">
-              <input
-                name="pet"
-                value={pet}
-                onChange={(event) => setPet(event.target.value)}
-                required
-                maxLength={120}
-                pattern=".*\S.*"
-              />
-            </Field>
-            <Field label="Tipo">
-              <select
-                name="type"
-                value={type}
-                onChange={(event) =>
-                  setType(event.target.value as Client['pet_type'])
-                }
-              >
-                <option value="DOG">Perro</option>
-                <option value="CAT">Gato</option>
-              </select>
-            </Field>
-          </div>
-          <Field label="Raza">
-            <input
-              name="breed"
-              value={breed}
-              onChange={(event) => setBreed(event.target.value)}
-              maxLength={120}
-            />
-          </Field>
-          <Field label="Teléfono / WhatsApp">
-            <input
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              placeholder="10 dígitos o código internacional"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              pattern="[+0-9 ()\-]{10,25}"
-            />
-          </Field>
-          <Field label="Dirección">
-            <input
-              name="address"
-              autoComplete="street-address"
-              value={address}
-              onChange={(event) => setAddress(event.target.value)}
-              maxLength={300}
-            />
-          </Field>
-          <label className="check-row">
-            <input
-              name="nervous"
-              type="checkbox"
-              checked={nervous}
-              onChange={(event) => setNervous(event.target.checked)}
-            />
-            <span>Es nervioso</span>
-          </label>
-          <Field label="Última visita">
-            <input
-              name="visit"
-              type="date"
-              max={isoDate()}
-              defaultValue={client?.last_visit}
-            />
-          </Field>
+          {manual && (
+            <>
+              <Field label="Nombre de la persona">
+                <input
+                  name="owner"
+                  value={owner}
+                  onChange={(event) => setOwner(event.target.value)}
+                  autoComplete="name"
+                  required
+                  maxLength={120}
+                  pattern=".*\S.*"
+                />
+              </Field>
+              <div className="form-grid">
+                <Field label="Nombre de la mascota">
+                  <input
+                    name="pet"
+                    value={pet}
+                    onChange={(event) => setPet(event.target.value)}
+                    required
+                    maxLength={120}
+                    pattern=".*\S.*"
+                  />
+                </Field>
+                <Field label="Tipo">
+                  <select
+                    name="type"
+                    value={type}
+                    onChange={(event) =>
+                      setType(event.target.value as Client['pet_type'])
+                    }
+                  >
+                    <option value="DOG">Perro</option>
+                    <option value="CAT">Gato</option>
+                  </select>
+                </Field>
+              </div>
+              <Field label="Raza">
+                <input
+                  name="breed"
+                  value={breed}
+                  onChange={(event) => setBreed(event.target.value)}
+                  maxLength={120}
+                />
+              </Field>
+              <Field label="Teléfono / WhatsApp">
+                <input
+                  name="phone"
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="10 dígitos o código internacional"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  pattern="[+0-9 ()\-]{10,25}"
+                />
+              </Field>
+              <Field label="Dirección">
+                <input
+                  name="address"
+                  autoComplete="street-address"
+                  value={address}
+                  onChange={(event) => setAddress(event.target.value)}
+                  maxLength={300}
+                />
+              </Field>
+              <label className="check-row">
+                <input
+                  name="nervous"
+                  type="checkbox"
+                  checked={nervous}
+                  onChange={(event) => setNervous(event.target.checked)}
+                />
+                <span>Es nervioso</span>
+              </label>
+              <Field label="Última visita">
+                <input
+                  name="visit"
+                  type="date"
+                  max={isoDate()}
+                  defaultValue={client?.last_visit}
+                />
+              </Field>
+            </>
+          )}
           {save.error && (
             <p className="error" role="alert">
               {errorMessage(save.error)}
@@ -376,7 +413,11 @@ function ClientForm({
             <button className="secondary" type="button" onClick={close}>
               Cancelar
             </button>
-            <button className="primary" type="submit">
+            <button
+              className="primary"
+              type="submit"
+              disabled={!manual && !message.trim()}
+            >
               {save.isPending ? 'Guardando…' : 'Guardar cliente'}
             </button>
           </div>
