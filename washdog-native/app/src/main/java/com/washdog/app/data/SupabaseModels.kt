@@ -3,6 +3,7 @@ package com.washdog.app.data
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.data.models.ApptStatus
 import com.washdog.app.data.models.Client
+import com.washdog.app.data.models.PaymentMethod
 import com.washdog.app.data.models.PetType
 import com.washdog.app.data.models.Transaction
 import com.washdog.app.data.models.TxType
@@ -52,7 +53,10 @@ data class TransactionRow(
     // La columna en Supabase es `date` (no `date_time`); el desajuste rompía el sync
     // de transacciones en silencio. El modelo local sigue llamándose dateTime.
     @SerialName("date") val dateTime: String,
-    @SerialName("updated_at") val updatedAt: String = ""
+    @SerialName("updated_at") val updatedAt: String = "",
+    // 'CASH' (Efectivo) o 'TRANSFER' (Transferencia; incluye tarjeta).
+    // NULL en filas viejas y en gastos OUT.
+    @SerialName("payment_method") val paymentMethod: String? = null
 )
 
 @Serializable
@@ -104,10 +108,11 @@ fun AppointmentRow.toAppointment() = Appointment(
 fun Transaction.toRow(userId: String) = TransactionRow(
     id = id, userId = userId, type = type.name,
     amount = amount, concept = concept, detail = detail, dateTime = dateTime,
-    updatedAt = updatedAt
+    updatedAt = updatedAt, paymentMethod = paymentMethod?.name
 )
 
 fun TransactionRow.toTransaction() = Transaction(
     id = id, type = TxType.valueOf(type), amount = amount,
-    concept = concept, detail = detail, dateTime = dateTime, updatedAt = updatedAt
+    concept = concept, detail = detail, dateTime = dateTime, updatedAt = updatedAt,
+    paymentMethod = paymentMethod?.let { PaymentMethod.valueOf(it) }
 )

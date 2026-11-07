@@ -958,6 +958,33 @@ small {
   margin: 0;
   overflow-wrap: anywhere;
 }
+.payment-chip {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+.payment-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.payment-filter-button {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+.payment-filter-button[aria-pressed="true"] {
+  font-weight: 700;
+  border-color: currentColor;
+}
 .transaction-row > strong {
   font-size: 15px;
   white-space: nowrap;

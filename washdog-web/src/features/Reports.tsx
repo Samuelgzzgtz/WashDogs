@@ -2,14 +2,16 @@ import { useState } from 'react'
 import { ArrowDownLeft, ArrowUpRight, Download, Trash2 } from 'lucide-react'
 import { Empty, Field, Modal, MoneyInput } from '../components'
 import { deleteRow, errorMessage, saveRow, useSave } from '../data/useData'
-import type { Snapshot, Transaction } from '../data/types'
+import type { PaymentMethod, Snapshot, Transaction } from '../data/types'
 import {
   accountBalance,
+  incomeByPaymentMethod,
   isoDate,
   money,
   monthClosing,
   monthClosings,
   openingBalance,
+  paymentMethodLabel,
   readableDate,
   services,
   totals,
@@ -26,6 +28,7 @@ export function Balance({ data, month }: { data: Snapshot; month: string }) {
   const { income, expense } = totals(data.transactions, month)
   const opening = openingBalance(data.transactions, month)
   const monthBalance = accountBalance(data.transactions, month)
+  const byMethod = incomeByPaymentMethod(data.transactions, month)
   const isCurrent = month === isoDate().slice(0, 7)
   return (
     <div className="balance">
@@ -44,6 +47,13 @@ export function Balance({ data, month }: { data: Snapshot; month: string }) {
             Ingresos del mes
           </span>
           <strong>{money(income)}</strong>
+          <small>
+            Efectivo {money(byMethod.cash)} · Transferencia{' '}
+            {money(byMethod.transfer)}
+            {byMethod.unknown > 0 && (
+              <> · Sin método {money(byMethod.unknown)}</>
+            )}
+          </small>
         </div>
         <div>
           <span>
@@ -132,13 +142,23 @@ function CashClose({
   )
 }
 
+type PaymentFilter = 'ALL' | PaymentMethod | 'UNKNOWN'
+
 export function Reports({ data, uid }: { data: Snapshot; uid: string }) {
   const [month, setMonth] = useState(isoDate().slice(0, 7))
   const [type, setType] = useState<'IN' | 'OUT' | null>(null)
   const [deleting, setDeleting] = useState<Transaction | null>(null)
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('ALL')
   const save = useSave(uid)
   const transactions = data.transactions
     .filter((tx) => tx.date.startsWith(month))
+    .filter(
+      (tx) =>
+        paymentFilter === 'ALL' ||
+        (paymentFilter === 'UNKNOWN'
+          ? tx.payment_method == null
+          : tx.payment_method === paymentFilter),
+    )
     .sort((a, b) => b.date.localeCompare(a.date))
   function download() {
     const url = URL.createObjectURL(
@@ -192,6 +212,26 @@ export function Reports({ data, uid }: { data: Snapshot; uid: string }) {
           Exportar CSV
         </button>
       </div>
+      <div className="payment-filter" role="group" aria-label="Filtrar por método de pago">
+        {(
+          [
+            ['ALL', 'Todos'],
+            ['CASH', 'Efectivo'],
+            ['TRANSFER', 'Transferencia'],
+            ['UNKNOWN', 'Sin método'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className="payment-filter-button"
+            aria-pressed={paymentFilter === value}
+            onClick={() => setPaymentFilter(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <div>
         {transactions.map((tx) => (
           <article className="transaction-row" key={tx.id}>
@@ -208,6 +248,11 @@ export function Reports({ data, uid }: { data: Snapshot; uid: string }) {
               <h3>{tx.concept}</h3>
               <p>{tx.detail}</p>
               <small>{readableDate(tx.date.slice(0, 10))}</small>
+              {tx.type === 'IN' && (
+                <span className="payment-chip">
+                  {paymentMethodLabel(tx.payment_method)}
+                </span>
+              )}
             </div>
             <strong className={tx.type === 'OUT' ? 'expense-text' : ''}>
               {tx.type === 'IN' ? '+' : '−'}
@@ -280,6 +325,8 @@ export function TransactionForm({
   close: () => void
 }) {
   const [amount, setAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethod>('CASH')
   const [id] = useState(() => crypto.randomUUID())
   const save = useSave(uid)
   return (
@@ -301,6 +348,8 @@ export function TransactionForm({
             detail: String(form.get('detail')).trim(),
             date: `${form.get('date')}T${new Date().toTimeString().slice(0, 5)}`,
             updated_at: new Date().toISOString(),
+            // Obligatorio solo en ingresos IN; los gastos OUT quedan NULL.
+            payment_method: type === 'IN' ? paymentMethod : null,
           }
           if (!Number.isFinite(row.amount) || row.amount <= 0 || !row.concept)
             return
@@ -341,6 +390,23 @@ export function TransactionForm({
                 placeholder="Ej. Productos de limpieza"
                 pattern=".*\S.*"
               />
+            </Field>
+          )}
+          {type === 'IN' && (
+            <Field label="Método de pago">
+              <select
+                name="payment_method"
+                required
+                value={paymentMethod}
+                onChange={(event) =>
+                  setPaymentMethod(event.target.value as PaymentMethod)
+                }
+              >
+                <option value="CASH">Efectivo</option>
+                <option value="TRANSFER">
+                  Transferencia (incluye tarjeta)
+                </option>
+              </select>
             </Field>
           )}
           <Field label="Monto (MXN)">

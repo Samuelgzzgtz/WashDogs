@@ -28,6 +28,7 @@ export type Appointment = {
   series_id: string | null;
   updated_at: string;
 };
+export type PaymentMethod = "CASH" | "TRANSFER";
 export type Transaction = {
   id: string;
   user_id: string;
@@ -37,6 +38,10 @@ export type Transaction = {
   detail: string;
   date: string;
   updated_at: string;
+  // Método de pago al ingresar dinero: 'CASH' (Efectivo) o 'TRANSFER'
+  // (Transferencia; la tarjeta se cuenta como transferencia).
+  // NULL en filas viejas y en gastos OUT: se muestra como "Sin método".
+  payment_method: PaymentMethod | null;
 };
 export type Goal = {
   id: string;

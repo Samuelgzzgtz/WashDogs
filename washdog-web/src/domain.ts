@@ -199,6 +199,36 @@ export function totals(transactions: Transaction[], month: string) {
     );
 }
 
+/** Etiqueta en español del método de pago; NULL es "Sin método". */
+export const paymentMethodLabel = (
+  method: Transaction["payment_method"],
+): string =>
+  method === "CASH"
+    ? "Efectivo"
+    : method === "TRANSFER"
+      ? "Transferencia"
+      : "Sin método";
+
+/** Desglose de ingresos del mes por método de pago. El total no cambia. */
+export function incomeByPaymentMethod(
+  transactions: Transaction[],
+  month: string,
+) {
+  return transactions
+    .filter((tx) => tx.type === "IN" && tx.date.startsWith(month))
+    .reduce(
+      (total, tx) => ({
+        cash: total.cash + (tx.payment_method === "CASH" ? tx.amount : 0),
+        transfer:
+          total.transfer + (tx.payment_method === "TRANSFER" ? tx.amount : 0),
+        unknown:
+          total.unknown + (tx.payment_method == null ? tx.amount : 0),
+        total: total.total + tx.amount,
+      }),
+      { cash: 0, transfer: 0, unknown: 0, total: 0 },
+    );
+}
+
 export function transactionsCsv(transactions: Transaction[]): string {
   const cell = (value: string | number) => {
     const text = String(value);
@@ -208,13 +238,14 @@ export function transactionsCsv(transactions: Transaction[]): string {
   return (
     "\ufeff" +
     [
-      ["Fecha", "Tipo", "Concepto", "Detalle", "Monto"],
+      ["Fecha", "Tipo", "Concepto", "Detalle", "Monto", "Método"],
       ...transactions.map((tx) => [
         tx.date,
         tx.type === "IN" ? "Ingreso" : "Gasto",
         tx.concept,
         tx.detail,
         tx.amount,
+        paymentMethodLabel(tx.payment_method),
       ]),
     ]
       .map((row) => row.map(cell).join(","))
@@ -335,6 +366,7 @@ export function goalContributionTransaction(input: {
     detail: "Aporte a meta · restado de la cuenta principal",
     date: `${isoDate(now)}T${time}`,
     updated_at: now.toISOString(),
+    payment_method: null,
   };
 }
 

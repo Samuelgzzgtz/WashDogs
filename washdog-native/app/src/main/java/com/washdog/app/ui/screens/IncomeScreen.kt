@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import com.washdog.app.R
 import com.washdog.app.data.WDService
 import com.washdog.app.data.WD_SERVICES
+import com.washdog.app.data.models.PaymentMethod
 import com.washdog.app.data.models.Transaction
 import com.washdog.app.data.models.TxType
 import com.washdog.app.ui.components.WDKeypad
@@ -83,6 +84,9 @@ fun IncomeScreen(vm: AppViewModel, onBack: () -> Unit) {
     var amountStr    by remember { mutableStateOf("0") }
     var serviceQuery by remember { mutableStateOf("") }
     var note         by remember { mutableStateOf("") }
+    // Método de pago del ingreso: Efectivo por defecto. La tarjeta se
+    // cuenta como transferencia, no es una tercera opción.
+    var paymentMethod by remember { mutableStateOf(PaymentMethod.CASH) }
 
     // Total: manual si el usuario tocó el keypad, si no → suma del carrito
     val cartTotal = cart.sumOf { it.price }
@@ -214,6 +218,32 @@ fun IncomeScreen(vm: AppViewModel, onBack: () -> Unit) {
                 )
             }
 
+            // Método de pago (obligatorio en ingresos IN)
+            Column(Modifier.padding(horizontal = ph)) {
+                Text("Método de pago", fontSize = 11.sp, color = WDInkMute, modifier = Modifier.padding(bottom = 6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        PaymentMethod.CASH to "Efectivo",
+                        PaymentMethod.TRANSFER to "Transferencia"
+                    ).forEach { (method, label) ->
+                        val selected = paymentMethod == method
+                        Button(
+                            onClick  = { paymentMethod = method },
+                            shape    = RoundedCornerShape(16.dp),
+                            colors   = ButtonDefaults.buttonColors(
+                                containerColor = if (selected) WDIncome else WDBgAlt,
+                                contentColor   = if (selected) Color.White else WDInk
+                            )
+                        ) { Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+                    }
+                }
+                Text(
+                    "La tarjeta se cuenta como transferencia.",
+                    fontSize = 11.sp, color = WDInkMute,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
             val finalAmount = display.takeIf { it > 0 } ?: (amountStr.toDoubleOrNull() ?: 0.0)
             val concept     = if (cart.size == 1) cart[0].name
                               else if (cart.size > 1) cart.joinToString(", ") { it.name }
@@ -224,12 +254,13 @@ fun IncomeScreen(vm: AppViewModel, onBack: () -> Unit) {
                     if (finalAmount > 0) {
                         vm.addTransaction(
                             Transaction(
-                                id       = UUID.randomUUID().toString(),
-                                type     = TxType.IN,
-                                amount   = finalAmount,
-                                concept  = concept.take(60),
-                                detail   = note.ifBlank { concept.take(60) },
-                                dateTime = LocalDateTime.now().toString()
+                                id            = UUID.randomUUID().toString(),
+                                type          = TxType.IN,
+                                amount        = finalAmount,
+                                concept       = concept.take(60),
+                                detail        = note.ifBlank { concept.take(60) },
+                                dateTime      = LocalDateTime.now().toString(),
+                                paymentMethod = paymentMethod
                             )
                         )
                         onBack()
