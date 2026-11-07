@@ -14,8 +14,10 @@ import {
   goalContributionTransaction,
   goalPercent,
   goalRemaining,
+  incomeByPaymentMethod,
   missingAppointments,
   parseCoinQuantity,
+  paymentMethodLabel,
   recurringAppointments,
   totals,
   transactionsCsv,
@@ -65,6 +67,7 @@ const tx: Transaction = {
   detail: "",
   date: "2026-10-23T10:00",
   updated_at: "",
+  payment_method: "CASH",
 };
 
 describe("agenda y compatibilidad Android", () => {
@@ -330,6 +333,7 @@ describe("aportes a metas y cuenta principal", () => {
     detail: "",
     date,
     updated_at: "",
+    payment_method: null,
   });
   it("calcula el saldo del mes: ingresos menos gastos", () => {
     const rows = [
@@ -377,6 +381,7 @@ describe("cierre de caja y saldo arrastrado", () => {
     detail: "",
     date,
     updated_at: "",
+    payment_method: null,
   });
   const rows = [
     tx("IN", 1000, "2026-10-05T10:00"),
@@ -419,5 +424,65 @@ describe("cierre de caja y saldo arrastrado", () => {
       "2026-10",
     ]);
     expect(monthClosings([], "2026-11")).toEqual([]);
+  });
+});
+
+describe("método de pago", () => {
+  const tx = (
+    amount: number,
+    payment_method: Transaction["payment_method"],
+  ): Transaction => ({
+    id: `${amount}-${payment_method ?? "null"}`,
+    user_id: "u",
+    type: "IN",
+    amount,
+    concept: "Baño",
+    detail: "",
+    date: "2026-11-02T10:00",
+    updated_at: "",
+    payment_method,
+  });
+  it("desglosa ingresos por método sin cambiar el total", () => {
+    const rows = [tx(500, "CASH"), tx(300, "TRANSFER"), tx(200, null)];
+    expect(incomeByPaymentMethod(rows, "2026-11")).toEqual({
+      cash: 500,
+      transfer: 300,
+      unknown: 200,
+      total: 1000,
+    });
+    expect(incomeByPaymentMethod(rows, "2026-10")).toEqual({
+      cash: 0,
+      transfer: 0,
+      unknown: 0,
+      total: 0,
+    });
+    // Los gastos OUT no entran en el desglose de ingresos.
+    expect(
+      incomeByPaymentMethod(
+        [{ ...tx(400, "CASH"), type: "OUT" as const }],
+        "2026-11",
+      ),
+    ).toEqual({ cash: 0, transfer: 0, unknown: 0, total: 0 });
+  });
+  it("etiqueta efectivo, transferencia y sin método", () => {
+    expect(paymentMethodLabel("CASH")).toBe("Efectivo");
+    expect(paymentMethodLabel("TRANSFER")).toBe("Transferencia");
+    expect(paymentMethodLabel(null)).toBe("Sin método");
+  });
+  it("exporta el método en el CSV y marca sin método a las filas viejas", () => {
+    const csv = transactionsCsv([tx(500, "CASH"), tx(200, null)]);
+    expect(csv).toContain("Método");
+    expect(csv).toContain("Efectivo");
+    expect(csv).toContain("Sin método");
+  });
+  it("el aporte a meta no lleva método de pago", () => {
+    const expense = goalContributionTransaction({
+      id: "t1",
+      uid: "u",
+      goalName: "Insumos",
+      amount: 100,
+      now: new Date(2026, 10, 1, 9, 5),
+    });
+    expect(expense.payment_method).toBeNull();
   });
 });

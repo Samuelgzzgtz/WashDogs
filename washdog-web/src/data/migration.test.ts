@@ -10,6 +10,7 @@ const migration = [
   "20261031000000_goals.sql",
   "20261031000100_coin_counts.sql",
   "20261103000000_client_address_nervous.sql",
+  "20261107000000_payment_method.sql",
 ]
   .map((file) =>
     readFileSync(
@@ -619,6 +620,36 @@ describe("migración PostgreSQL y seguridad por usuario", () => {
     ).toEqual([
       { tpl_welcome: "Android nuevo", updated_at: "2026-01-02T12:00:00Z" },
     ]);
+  });
+  it("transacciones: el método de pago es nullable y solo acepta CASH o TRANSFER", async () => {
+    // Una fila vieja (sin payment_method, como la sube la app vieja) queda NULL.
+    await db.query(
+      "insert into public.transactions(id,user_id,type,amount,concept,detail,date) values ('old',$1,'IN',200,'Baño','','2026-11-01T10:00')",
+      [owner],
+    );
+    // Un ingreso nuevo con efectivo y otro por transferencia.
+    await db.query(
+      "insert into public.transactions(id,user_id,type,amount,concept,detail,date,payment_method) values ('cash',$1,'IN',250,'Baño','','2026-11-02T10:00','CASH'), ('tr',$1,'IN',300,'Baño','','2026-11-02T11:00','TRANSFER')",
+      [owner],
+    );
+    expect(
+      (
+        await db.query(
+          "select id, payment_method from public.transactions order by id",
+        )
+      ).rows,
+    ).toEqual([
+      { id: "cash", payment_method: "CASH" },
+      { id: "old", payment_method: null },
+      { id: "tr", payment_method: "TRANSFER" },
+    ]);
+    // La tarjeta NO es una tercera opción: 'CARD' se rechaza.
+    await expect(
+      db.query(
+        "insert into public.transactions(id,user_id,type,amount,concept,detail,date,payment_method) values ('card',$1,'IN',100,'Baño','','2026-11-02T12:00','CARD')",
+        [owner],
+      ),
+    ).rejects.toThrow();
   });
   it("clientes: dirección y nervioso tienen valor por defecto y se guardan por usuario", async () => {
     // El cliente creado sin esas columnas (como hace la app Android) queda con los valores por defecto.

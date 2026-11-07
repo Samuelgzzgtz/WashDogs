@@ -10,6 +10,7 @@ import com.washdog.app.data.toTransaction
 import com.washdog.app.data.models.Appointment
 import com.washdog.app.data.models.ApptStatus
 import com.washdog.app.data.models.Client
+import com.washdog.app.data.models.PaymentMethod
 import com.washdog.app.data.models.PetType
 import com.washdog.app.data.models.Transaction
 import com.washdog.app.data.models.TxType
@@ -49,11 +50,36 @@ class SupabaseModelsTest {
 
     @Test
     fun `Transaction toRow then toTransaction roundtrip`() {
-        val tx = Transaction("3", TxType.IN, 450.0, "Baño+Corte", "Luna", "2026-05-25T10:20")
+        val tx = Transaction(
+            "3", TxType.IN, 450.0, "Baño+Corte", "Luna", "2026-05-25T10:20",
+            paymentMethod = PaymentMethod.TRANSFER
+        )
         val row = tx.toRow("user-abc")
         assertEquals("IN", row.type)
+        assertEquals("TRANSFER", row.paymentMethod)
         val restored = row.toTransaction()
         assertEquals(tx, restored)
+    }
+
+    @Test
+    fun `Transaction without payment method roundtrips as null`() {
+        // Filas viejas y gastos OUT: payment_method NULL ("Sin método").
+        val tx = Transaction("4", TxType.OUT, 100.0, "Insumos", "Shampoo", "2026-05-25T10:20")
+        val row = tx.toRow("user-abc")
+        assertEquals(null, row.paymentMethod)
+        val restored = row.toTransaction()
+        assertEquals(tx, restored)
+        assertEquals(null, restored.paymentMethod)
+    }
+
+    @Test
+    fun `TransactionRow serializes payment_method field`() {
+        val row = Transaction(
+            "3", TxType.IN, 450.0, "c", "d", "2026-05-25T10:20",
+            paymentMethod = PaymentMethod.CASH
+        ).toRow("u")
+        val json = Json.encodeToString(row)
+        assertTrue("Debe usar la clave 'payment_method'", json.contains("\"payment_method\":\"CASH\""))
     }
 
     // Regresión v1.3.2: la columna de la fecha en Supabase es `date`, no `date_time`.
