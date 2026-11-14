@@ -46,6 +46,8 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
+        // Push notifications (avisos del bot) live in a small hand-written script.
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

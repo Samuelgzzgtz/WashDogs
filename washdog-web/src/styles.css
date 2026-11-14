@@ -1984,3 +1984,208 @@ small {
   background: var(--green);
   color: #fff;
 }
+
+/* ---------- Bot (secretario de WhatsApp) ---------- */
+.sidebar nav a,
+.bottom-nav a {
+  position: relative;
+}
+.nav-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #b4533a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.sidebar nav .nav-badge {
+  margin-left: auto;
+}
+.bottom-nav .nav-badge {
+  position: absolute;
+  top: -4px;
+  right: 6px;
+}
+.bot-section {
+  max-width: 720px;
+}
+.bot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+.bot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+.bot-alert {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--green);
+  border-radius: 8px;
+  padding: 14px 16px 6px;
+  margin-bottom: 12px;
+  background: #fff;
+}
+.bot-alert.kind-same_day {
+  border-left-color: #b4533a;
+}
+.bot-alert.kind-out_of_zone,
+.bot-alert.kind-review {
+  border-left-color: #c49a3a;
+}
+.bot-alert h3 {
+  margin: 6px 0 2px;
+  font-size: 16px;
+}
+.bot-alert p {
+  margin: 4px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.bot-alert-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.bot-alert-head strong {
+  color: var(--green);
+}
+.bot-alert-when {
+  font-weight: 600;
+}
+.bot-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.bot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.bot-chip:has(input:checked) {
+  background: #e7efe9;
+  border-color: var(--green);
+}
+.bot-reply {
+  background: var(--warm);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 14px;
+}
+.bot-reply p {
+  margin: 6px 0;
+}
+.bot-lines,
+.bot-offers {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 12px;
+}
+.bot-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.bot-lines .bot-total {
+  font-weight: 700;
+  border-bottom: 0;
+}
+.bot-offers li {
+  padding: 4px 0;
+}
+.bot-offers em {
+  color: var(--green);
+  font-style: normal;
+  font-size: 12px;
+}
+.bot-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.bot-table-head,
+.bot-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 70px 64px;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.bot-table-head {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.bot-table input,
+.bot-zone input,
+.bot-zone select,
+.bot-section textarea {
+  width: 100%;
+  min-width: 0;
+}
+.bot-name {
+  font-weight: 650;
+}
+.bot-from {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.bot-zone {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.bot-zone .bot-name {
+  margin-bottom: 12px;
+}
+.bot-zone-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.bot-save {
+  position: sticky;
+  bottom: 0;
+  max-width: 720px;
+  padding: 14px 0;
+  background: #faf6f0;
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+}
+@media (max-width: 760px) {
+  .bot-table-head,
+  .bot-table-row {
+    grid-template-columns: minmax(0, 1fr) 70px 58px 56px;
+    gap: 6px;
+  }
+  .bot-zone-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .bot-save {
+    bottom: calc(66px + env(safe-area-inset-bottom));
+  }
+}

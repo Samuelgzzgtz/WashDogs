@@ -14,5 +14,5 @@
     "noUnusedParameters": true,
     "types": ["vite/client", "vite-plugin-pwa/client", "node"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "api", "vite.config.ts"]
 }

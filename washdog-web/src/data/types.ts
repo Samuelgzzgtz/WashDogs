@@ -10,6 +10,10 @@ export type Client = {
   phone: string;
   address: string;
   nervous: boolean;
+  /** Talla del perro, para calcular cuánto dura el servicio. Vacío = sin capturar. */
+  size: "" | "PEQUENO" | "MEDIANO" | "GRANDE" | "JUMBO";
+  /** Tipo de pelo (sobre todo para gatos). Vacío = sin capturar. */
+  coat: "" | "CORTO" | "LARGO";
   updated_at: string;
 };
 export type Appointment = {
@@ -73,6 +77,34 @@ export type AppointmentSeries = {
   template: Appointment;
   stopped_at: string;
 };
+export type BotConfigRow = {
+  user_id: string;
+  /** Ver `BotConfig` en src/bot/config.ts. */
+  config: Record<string, unknown>;
+  updated_at: string;
+};
+export type BotAlert = {
+  id: string;
+  user_id: string;
+  kind: "BOOKING" | "SAME_DAY" | "OUT_OF_ZONE" | "REVIEW" | "TEST";
+  phone: string;
+  customer_name: string;
+  summary: string;
+  requested_date: string;
+  requested_time: string;
+  status: "PENDING" | "ACCEPTED" | "REJECTED";
+  created_at: string;
+  updated_at: string;
+};
+export type PushSubscriptionRow = {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  user_agent: string;
+  created_at: string;
+};
 type Table<Row> = {
   Row: Row;
   Insert: Row;
@@ -90,6 +122,9 @@ export type Database = {
       user_settings: Table<Settings>;
       tombstones: Table<Tombstone>;
       appointment_series: Table<AppointmentSeries>;
+      bot_config: Table<BotConfigRow>;
+      bot_alerts: Table<BotAlert>;
+      push_subscriptions: Table<PushSubscriptionRow>;
     };
     Views: { [_ in never]: never };
     Functions: {

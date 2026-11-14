@@ -180,6 +180,8 @@ describe("clientFromParsed", () => {
       phone: "",
       address: "",
       nervous: false,
+      size: "",
+      coat: "",
       pet_type: "DOG",
       last_visit: "",
       needs_reschedule: false,

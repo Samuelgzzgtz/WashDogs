@@ -217,6 +217,8 @@ function ClientForm({
   const [phone, setPhone] = useState(client?.phone ?? '')
   const [address, setAddress] = useState(client?.address ?? '')
   const [nervous, setNervous] = useState(client?.nervous ?? false)
+  const [size, setSize] = useState<Client['size']>(client?.size ?? '')
+  const [coat, setCoat] = useState<Client['coat']>(client?.coat ?? '')
   const [type, setType] = useState<Client['pet_type']>(
     client?.pet_type ?? 'DOG',
   )
@@ -300,6 +302,8 @@ function ClientForm({
             phone: phone.trim(),
             address: address.trim(),
             nervous,
+            size: type === 'CAT' ? '' : size,
+            coat,
             pet_type: type,
             last_visit: String(form.get('visit') ?? ''),
             needs_reschedule: client?.needs_reschedule ?? false,
@@ -407,6 +411,38 @@ function ClientForm({
                   >
                     <option value="DOG">Perro</option>
                     <option value="CAT">Gato</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="form-grid">
+                {type === 'DOG' && (
+                  <Field label="Talla">
+                    <select
+                      name="size"
+                      value={size}
+                      onChange={(event) =>
+                        setSize(event.target.value as Client['size'])
+                      }
+                    >
+                      <option value="">Sin capturar</option>
+                      <option value="PEQUENO">Pequeño</option>
+                      <option value="MEDIANO">Mediano</option>
+                      <option value="GRANDE">Grande</option>
+                      <option value="JUMBO">Jumbo</option>
+                    </select>
+                  </Field>
+                )}
+                <Field label="Pelo">
+                  <select
+                    name="coat"
+                    value={coat}
+                    onChange={(event) =>
+                      setCoat(event.target.value as Client['coat'])
+                    }
+                  >
+                    <option value="">Sin capturar</option>
+                    <option value="CORTO">Corto</option>
+                    <option value="LARGO">Largo</option>
                   </select>
                 </Field>
               </div>

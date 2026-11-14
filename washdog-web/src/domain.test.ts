@@ -38,6 +38,8 @@ const client: Client = {
   phone: "8112345678",
   address: "",
   nervous: false,
+  size: "",
+  coat: "",
   updated_at: "",
 };
 const appointment: Appointment = {

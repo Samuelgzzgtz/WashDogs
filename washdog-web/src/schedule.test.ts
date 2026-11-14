@@ -157,6 +157,8 @@ describe("appointmentForSlot", () => {
     phone: "8112345678",
     address: "Av. Juárez 123",
     nervous: true,
+    size: "",
+    coat: "",
     updated_at: "",
   };
   const picked = {
