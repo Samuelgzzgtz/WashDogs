@@ -63,6 +63,12 @@ type WaPayload = {
     changes?: {
       value?: {
         messages?: WaMessage[];
+        statuses?: {
+          id?: string;
+          status?: string;
+          recipient_id?: string;
+          errors?: { code?: number; title?: string; message?: string; error_data?: unknown }[];
+        }[];
         contacts?: { wa_id?: string; profile?: { name?: string } }[];
       };
     }[];
@@ -131,6 +137,10 @@ export async function POST(request: Request) {
   for (const entry of payload.entry ?? [])
     for (const change of entry.changes ?? []) {
       const value = change.value;
+      // Meta avisa si un mensaje nuestro no se pudo entregar: que quede en los registros.
+      for (const status of value?.statuses ?? [])
+        if (status.status === "failed")
+          console.error("whatsapp delivery failed", JSON.stringify(status));
       for (const message of value?.messages ?? []) {
         const phone = message.from;
         const profileName =
