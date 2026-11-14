@@ -11,6 +11,8 @@ const migration = [
   "20261031000100_coin_counts.sql",
   "20261103000000_client_address_nervous.sql",
   "20261114000000_bot.sql",
+  "20261114000100_bot_service_grants.sql",
+  "20261114000200_bot_messages.sql",
 ]
   .map((file) =>
     readFileSync(
@@ -47,7 +49,7 @@ async function createAppointment(
 
 beforeAll(async () => {
   db = new PGlite();
-  await db.exec(`create role authenticated; create role anon; create schema auth;
+  await db.exec(`create role authenticated; create role anon; create role service_role; create schema auth;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid$$;
     grant usage on schema auth, public to authenticated;
@@ -63,7 +65,7 @@ beforeAll(async () => {
 }, 60_000);
 beforeEach(async () => {
   await db.exec(
-    "reset role; truncate public.clients, public.appointments, public.transactions, public.goals, public.coin_counts, public.tombstones, public.user_settings, public.appointment_series, public.bot_config, public.bot_alerts, public.push_subscriptions;",
+    "reset role; truncate public.clients, public.appointments, public.transactions, public.goals, public.coin_counts, public.tombstones, public.user_settings, public.appointment_series, public.bot_config, public.bot_alerts, public.push_subscriptions, public.bot_messages;",
   );
   await db.exec(
     `insert into auth.users values ('${owner}'), ('${other}') on conflict do nothing;`,

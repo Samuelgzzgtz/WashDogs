@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.4.0",
     "@supabase/supabase-js": "^2.90.0",
     "@tanstack/react-query": "^5.90.0",
     "lucide-react": "^0.468.0",
