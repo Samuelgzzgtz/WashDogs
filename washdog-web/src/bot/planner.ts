@@ -1,7 +1,7 @@
 import type { Appointment, Client } from "../data/types";
-import { addDays } from "../domain";
-import { slotsForDate } from "../schedule";
-import type { BotConfig, PetKind, PriceTime, Size, Zone } from "./config";
+import { addDays } from "../domain.js";
+import { slotsForDate } from "../schedule.js";
+import type { BotConfig, PetKind, PriceTime, Size, Zone } from "./config.js";
 
 const toMinutes = (time: string) =>
   Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));

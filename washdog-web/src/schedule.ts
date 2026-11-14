@@ -1,5 +1,5 @@
 import type { Appointment, Client } from "./data/types";
-import { addDays } from "./domain";
+import { addDays } from "./domain.js";
 
 /** Un horario de atención: hora de llegada y de salida en formato 24 h ("15:30"). */
 export type Slot = { time: string; end: string };
