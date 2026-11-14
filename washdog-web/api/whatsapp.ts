@@ -76,6 +76,11 @@ function monterreyNow(): Date {
   );
 }
 
+/** WhatsApp entrega los celulares de México como 521XXXXXXXXXX, pero para enviar espera 52XXXXXXXXXX. */
+export function waRecipient(from: string): string {
+  return from.replace(/^521(\d{10})$/, "52$1");
+}
+
 async function sendText(to: string, body: string) {
   const response = await fetch(
     `${GRAPH()}/${env("WHATSAPP_PHONE_NUMBER_ID")}/messages`,
@@ -87,7 +92,7 @@ async function sendText(to: string, body: string) {
       },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        to,
+        to: waRecipient(to),
         type: "text",
         text: { body, preview_url: false },
       }),
