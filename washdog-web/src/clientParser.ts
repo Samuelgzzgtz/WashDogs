@@ -255,6 +255,8 @@ export function clientFromParsed(
     phone: parsed.phone ?? "",
     address: (parsed.address ?? "").slice(0, 300),
     nervous: parsed.nervous ?? false,
+    size: "",
+    coat: "",
     pet_type: parsed.pet_type ?? "DOG",
     last_visit: "",
     needs_reschedule: false,

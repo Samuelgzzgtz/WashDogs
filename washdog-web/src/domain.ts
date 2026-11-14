@@ -8,23 +8,27 @@ import type {
 } from "./data/types";
 
 export const services = [
-  ["Baño Perro Pequeño", 200],
+  ["Baño Perro Pequeño", 220],
   ["Baño Perro Mediano", 250],
-  ["Baño Perro Grande", 300],
-  ["Baño Perro Jumbo", 375],
+  ["Baño Perro Grande", 320],
+  ["Baño Perro Jumbo", 390],
   ["Baño Gato Pelo Corto", 250],
   ["Baño Gato Pelo Largo", 300],
   ["Corte de Uñas", 50],
-  ["Detalles Mínimos c/Tijera", 50],
+  ["Limpieza de Oídos", 50],
+  ["Detalles con Tijera", 50],
   ["Corte Higiénico", 50],
-  ["Limpieza de Oídos", 35],
-  ["Deslanado", 120],
   ["Estética Canina Básica", 150],
-  ["Rapa Completa", 120],
+  ["Rapa Completa", 150],
+  ["Deslanado Chico/Mediano", 80],
+  ["Deslanado Grande", 150],
+  ["Deslanado Jumbo", 180],
+  ["Cepillado Profundo Chico/Mediano", 80],
+  ["Cepillado Profundo Grande", 150],
+  ["Cepillado Profundo Jumbo", 200],
   ["Acondicionador", 50],
-  ["Domicilio · Sector Granada", 30],
   ["Domicilio · Mitras Poniente", 50],
-  ["Domicilio · Alrededores", 60],
+  ["Domicilio · Alrededores", 80],
 ] as const;
 
 export function isoDate(date = new Date()): string {

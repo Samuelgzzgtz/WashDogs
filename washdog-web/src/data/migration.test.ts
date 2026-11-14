@@ -10,6 +10,7 @@ const migration = [
   "20261031000000_goals.sql",
   "20261031000100_coin_counts.sql",
   "20261103000000_client_address_nervous.sql",
+  "20261114000000_bot.sql",
 ]
   .map((file) =>
     readFileSync(
@@ -62,7 +63,7 @@ beforeAll(async () => {
 }, 60_000);
 beforeEach(async () => {
   await db.exec(
-    "reset role; truncate public.clients, public.appointments, public.transactions, public.goals, public.coin_counts, public.tombstones, public.user_settings, public.appointment_series;",
+    "reset role; truncate public.clients, public.appointments, public.transactions, public.goals, public.coin_counts, public.tombstones, public.user_settings, public.appointment_series, public.bot_config, public.bot_alerts, public.push_subscriptions;",
   );
   await db.exec(
     `insert into auth.users values ('${owner}'), ('${other}') on conflict do nothing;`,
@@ -646,5 +647,48 @@ describe("migración PostgreSQL y seguridad por usuario", () => {
         )
       ).rows,
     ).toEqual([{ address: "Av. Juárez 123", nervous: true }]);
+  });
+  it("bot: talla y pelo con valores válidos; configuración, avisos y dispositivos aislados por cuenta", async () => {
+    expect(
+      (await db.query("select size, coat from public.clients where id = 'c1'")).rows,
+    ).toEqual([{ size: "", coat: "" }]);
+    await db.query("update public.clients set size = 'GRANDE', coat = 'LARGO' where id = 'c1'");
+    await expect(
+      db.query("update public.clients set size = 'ENORME' where id = 'c1'"),
+    ).rejects.toThrow(/check/);
+
+    await db.query(
+      "insert into public.bot_config(user_id, config, updated_at) values ($1, $2, '2026-11-14T10:00:00Z')",
+      [owner, JSON.stringify({ enabled: true })],
+    );
+    await db.query(
+      "insert into public.bot_alerts(id, user_id, kind, summary) values ('a1', $1, 'BOOKING', 'Jueves 5pm, perro grande')",
+      [owner],
+    );
+    await db.query(
+      "insert into public.push_subscriptions(id, user_id, endpoint, p256dh, auth) values ('p1', $1, 'https://push.example/1', 'k', 'a')",
+      [owner],
+    );
+    await expect(
+      db.query(
+        "insert into public.bot_alerts(id, user_id, kind, summary) values ('a2', $1, 'NADA', 'x')",
+        [owner],
+      ),
+    ).rejects.toThrow(/check/);
+    await expect(
+      db.query(
+        "insert into public.bot_alerts(id, user_id, kind, summary) values ('a3', $1, 'BOOKING', 'x')",
+        [other],
+      ),
+    ).rejects.toThrow(/row-level security/);
+
+    await asUser(other);
+    for (const table of ["bot_config", "bot_alerts", "push_subscriptions"])
+      expect((await db.query(`select * from public.${table}`)).rows).toEqual([]);
+    await db.exec("update public.bot_alerts set status = 'ACCEPTED'");
+    await asUser(owner);
+    expect(
+      (await db.query("select status from public.bot_alerts where id = 'a1'")).rows,
+    ).toEqual([{ status: "PENDING" }]);
   });
 });

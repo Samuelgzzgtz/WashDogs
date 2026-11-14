@@ -4,6 +4,7 @@ import {
   ArrowDownLeft,
   ArrowRight,
   ArrowUpRight,
+  Bot as BotIcon,
   CalendarDays,
   Cloud,
   Home,
@@ -28,6 +29,8 @@ import {
   whatsapp,
 } from "./domain";
 import { Agenda } from "./features/Agenda";
+import { Bot } from "./features/Bot";
+import { useBot } from "./bot/useBot";
 import { Clients } from "./features/Clients";
 import { Coins } from "./features/Coins";
 import { Goals } from "./features/Goals";
@@ -40,6 +43,7 @@ const navigation = [
   ["agenda", "Agenda", CalendarDays],
   ["clientes", "Clientes", Users],
   ["reportes", "Cuentas", Wallet],
+  ["bot", "Bot", BotIcon],
   ["ajustes", "Ajustes", Settings2],
 ] as const;
 type Page = (typeof navigation)[number][0];
@@ -74,6 +78,9 @@ function Workspace({ session }: { session: Session }) {
   const [newAppointment, setNewAppointment] = useState(false);
   const online = useOnline();
   const query = useData(session.user.id);
+  const bot = useBot(session.user.id);
+  const pendingAlerts =
+    bot.data?.alerts.filter((a) => a.status === "PENDING").length ?? 0;
   const queryClient = useQueryClient();
   useEffect(() => {
     const update = () => {
@@ -107,6 +114,9 @@ function Workspace({ session }: { session: Session }) {
             >
               <Icon size={21} />
               <span>{label}</span>
+              {id === "bot" && pendingAlerts > 0 && (
+                <span className="nav-badge">{pendingAlerts}</span>
+              )}
             </a>
           ))}
         </nav>
@@ -185,6 +195,9 @@ function Workspace({ session }: { session: Session }) {
               {page === "reportes" && (
                 <Reports data={query.data} uid={session.user.id} />
               )}
+              {page === "bot" && (
+                <Bot data={query.data} uid={session.user.id} />
+              )}
               {page === "ajustes" && (
                 <Settings
                   settings={query.data.settings}
@@ -208,6 +221,9 @@ function Workspace({ session }: { session: Session }) {
           >
             <Icon size={22} />
             <span>{label}</span>
+            {id === "bot" && pendingAlerts > 0 && (
+              <span className="nav-badge">{pendingAlerts}</span>
+            )}
           </a>
         ))}
       </nav>
