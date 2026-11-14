@@ -11,6 +11,7 @@ const migration = [
   "20261031000100_coin_counts.sql",
   "20261103000000_client_address_nervous.sql",
   "20261114000000_bot.sql",
+  "20261114000100_bot_service_grants.sql",
 ]
   .map((file) =>
     readFileSync(
@@ -47,7 +48,7 @@ async function createAppointment(
 
 beforeAll(async () => {
   db = new PGlite();
-  await db.exec(`create role authenticated; create role anon; create schema auth;
+  await db.exec(`create role authenticated; create role anon; create role service_role; create schema auth;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid$$;
     grant usage on schema auth, public to authenticated;
