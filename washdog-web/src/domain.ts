@@ -170,15 +170,17 @@ export function visibleRows<T extends { id: string; updated_at: string }>(
   );
 }
 
+/** Clientes con `minDays` o más desde su última visita y sin cita pendiente. */
 export function clientsToRemind(
   clients: Client[],
   appointments: Appointment[],
   today = isoDate(),
+  minDays = 30,
 ): Client[] {
   return clients.filter(
     (client) =>
       client.last_visit &&
-      client.last_visit <= addDays(today, -30) &&
+      client.last_visit <= addDays(today, -minDays) &&
       !appointments.some(
         (a) =>
           a.date >= today &&
@@ -190,6 +192,21 @@ export function clientsToRemind(
       ),
   );
 }
+
+/** Días completos entre una fecha ISO y hoy. */
+export function daysSince(date: string, today = isoDate()): number {
+  return Math.round(
+    (Date.parse(`${today}T12:00:00`) - Date.parse(`${date}T12:00:00`)) /
+      86_400_000,
+  );
+}
+
+/**
+ * Mensaje para invitar a otro baño a quien lleva semanas sin venir.
+ * Conserva `{{nombre}}` para que `whatsapp()` ponga el nombre del dueño.
+ */
+export const rebookTemplate = (client: Pick<Client, "pet_name">): string =>
+  `Hola {{nombre}}, ¿cómo estás? Ya van unas semanas del último baño de ${client.pet_name}. ¿Te gustaría agendar otro? Dime qué día te acomoda y te confirmo horario 🐾`;
 
 export function totals(transactions: Transaction[], month: string) {
   return transactions

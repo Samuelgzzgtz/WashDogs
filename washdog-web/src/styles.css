@@ -703,6 +703,12 @@ small {
   color: var(--muted);
   margin-bottom: 22px;
 }
+.agenda-reminders {
+  margin-top: 40px;
+}
+.agenda-reminders .view-toggle {
+  margin-bottom: 8px;
+}
 .reminder-row {
   border-top: 1px solid var(--line);
   display: flex;
