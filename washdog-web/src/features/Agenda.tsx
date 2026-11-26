@@ -17,9 +17,12 @@ import { supabase } from '../data/supabase'
 import {
   addDays,
   appointmentClient,
+  clientsToRemind,
+  daysSince,
   findConflict,
   isoDate,
   readableDate,
+  rebookTemplate,
   recurringAppointments,
   services,
   whatsapp,
@@ -125,6 +128,88 @@ export function AppointmentList({
         )
       })}
     </div>
+  )
+}
+
+const REMIND_OPTIONS = [
+  { days: 14, label: '2 semanas' },
+  { days: 21, label: '3 semanas' },
+  { days: 30, label: '1 mes' },
+] as const
+
+/** Clientes que llevan semanas sin bañar a su mascota, con un toque para invitarlos por WhatsApp. */
+function ClientsToRemind({ data }: { data: Snapshot }) {
+  const [days, setDays] = useState<number>(14)
+  const today = isoDate()
+  const clients = clientsToRemind(data.clients, data.appointments, today, days)
+    .slice()
+    .sort((a, b) => a.last_visit.localeCompare(b.last_visit))
+  return (
+    <section className="agenda-reminders" aria-labelledby="por-recordar">
+      <div className="section-heading">
+        <h2 id="por-recordar">Clientes por recordar</h2>
+        <span>{clients.length}</span>
+      </div>
+      <p className="section-description">
+        Sin visita desde hace {REMIND_OPTIONS.find((o) => o.days === days)?.label}{' '}
+        o más y sin cita pendiente. Cada mensaje se manda con un toque, desde tu
+        WhatsApp.
+      </p>
+      <div
+        className="view-toggle"
+        role="group"
+        aria-label="Tiempo sin visita"
+      >
+        {REMIND_OPTIONS.map((o) => (
+          <button
+            type="button"
+            key={o.days}
+            aria-pressed={days === o.days}
+            onClick={() => setDays(o.days)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      {!clients.length ? (
+        <Empty>Nadie por recordar con este tiempo.</Empty>
+      ) : (
+        clients.map((client) => {
+          const link = whatsapp(
+            client.phone,
+            rebookTemplate(client),
+            client.owner_name,
+          )
+          return (
+            <div className="reminder-row" key={client.id}>
+              <div>
+                <h3>{client.pet_name}</h3>
+                <p>{client.owner_name}</p>
+                <small>
+                  Hace {daysSince(client.last_visit, today)} días ·{' '}
+                  {readableDate(client.last_visit)}
+                </small>
+              </div>
+              {link ? (
+                <a
+                  className="icon-button"
+                  href={link}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Invitar a otro baño a ${client.owner_name}`}
+                >
+                  <MessageCircle size={20} />
+                </a>
+              ) : (
+                <a className="text-button" href="#clientes">
+                  Añadir teléfono
+                </a>
+              )}
+            </div>
+          )
+        })
+      )}
+    </section>
   )
 }
 
@@ -296,6 +381,7 @@ export function Agenda({
           )}
         </>
       )}
+      <ClientsToRemind data={data} />
       {editing && (
         <AppointmentForm
           data={data}

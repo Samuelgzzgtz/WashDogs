@@ -5,6 +5,8 @@ import {
   clientsToRemind,
   coinQuantities,
   coinTotals,
+  daysSince,
+  rebookTemplate,
   findConflict,
   accountBalance,
   cashBalance,
@@ -210,6 +212,29 @@ describe("agenda y compatibilidad Android", () => {
     expect(
       clientsToRemind([{ ...client, last_visit: "" }], [], "2026-10-23"),
     ).toEqual([]);
+  });
+  it("permite elegir cuántos días sin visita cuentan para recordar", () => {
+    const reciente = { ...client, last_visit: "2026-10-05" };
+    expect(clientsToRemind([reciente], [], "2026-10-23")).toEqual([]);
+    expect(clientsToRemind([reciente], [], "2026-10-23", 14)).toEqual([
+      reciente,
+    ]);
+    expect(clientsToRemind([reciente], [], "2026-10-23", 21)).toEqual([]);
+    expect(
+      clientsToRemind([{ ...client, last_visit: "2026-10-09" }], [], "2026-10-23", 14),
+    ).toHaveLength(1);
+  });
+  it("cuenta los días desde la última visita", () => {
+    expect(daysSince("2026-10-09", "2026-10-23")).toBe(14);
+    expect(daysSince("2026-10-23", "2026-10-23")).toBe(0);
+  });
+  it("arma el mensaje de nuevo baño con el nombre del dueño y de la mascota", () => {
+    const link = whatsapp(client.phone, rebookTemplate(client), client.owner_name);
+    expect(link).toContain("https://wa.me/528112345678?text=");
+    const text = decodeURIComponent(link!.split("text=")[1]);
+    expect(text).toContain("Hola Samuel");
+    expect(text).toContain("baño de Luna");
+    expect(text).not.toContain("{{");
   });
 });
 
